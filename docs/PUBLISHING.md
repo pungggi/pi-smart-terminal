@@ -2,18 +2,11 @@
 
 Tag-driven CI publish with npm provenance.
 
-## Bootstrap (one-time, first publish)
+## Bootstrap (one-time, first publish) — ✅ DONE 2026-08-16
 
-npm Trusted Publishing cannot create a new package — the very first publish
-is manual:
-
-1. Temporarily drop the `prepublishOnly` script from `package.json`
-2. `npm publish --access public` (no `--provenance`)
-3. npmjs.com → `pi-smart-terminal` → **Settings → Trusted Publisher**:
-   - **Organization or user:** `pungggi`
-   - **Repository:** `pi-smart-terminal`
-   - **Workflow filename:** `release.yml`
-4. Restore `prepublishOnly`, commit. Every later publish is CI-only via OIDC.
+0.1.0 published manually from `de014f7` (no provenance — Trusted Publisher
+didn't exist yet). Smart-terminal-mcp ≥ 1.2.37 (marker-race fix) is on npm
+as required.
 
 ## Regular releases
 
