@@ -10,6 +10,11 @@ as required.
 
 ## Regular releases
 
+Note: npm ≥ 11.6 blocks dependency install scripts by default. This package
+allows `node-pty` via the top-level `allowScripts` field in package.json —
+node-pty ships prebuilds for darwin/win32 only; Linux compiles from source
+(needs python3 + make + g++).
+
 ```bash
 # bump version in package.json, commit, then:
 git tag v0.1.0

@@ -33,6 +33,9 @@
 	"engines": {
 		"node": ">=20.0.0"
 	},
+	"allowScripts": {
+		"node-pty": true
+	},
 	"dependencies": {
 		"smart-terminal-mcp": "^1.2.37"
 	},
