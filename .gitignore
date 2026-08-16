@@ -6,3 +6,6 @@ Thumbs.db
 
 # local pi settings (machine-specific)
 .pi/settings.json
+
+# local pi agent telemetry (machine-specific)
+.pi/ghost-autocomplete/
