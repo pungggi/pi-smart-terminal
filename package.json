@@ -34,7 +34,7 @@
 		"node": ">=20.0.0"
 	},
 	"dependencies": {
-		"smart-terminal-mcp": "^1.2.36"
+		"smart-terminal-mcp": "^1.2.37"
 	},
 	"peerDependencies": {
 		"@earendil-works/pi-coding-agent": ">=0.84.1",
