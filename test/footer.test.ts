@@ -57,3 +57,62 @@ describe("buildFooterText", () => {
 		expect(text!.endsWith("…")).toBe(true);
 	});
 });
+
+describe("buildFooterText · auto mode", () => {
+	it("is silent while idle", () => {
+		expect(buildFooterText([session()], { agentSessionId: null, mode: "auto" })).toBeUndefined();
+	});
+
+	it("shows busy count and cwd tail while busy", () => {
+		expect(
+			buildFooterText([session({ busy: true, cwd: "C:\\dev\\project" })], {
+				agentSessionId: null,
+				mode: "auto",
+			}),
+		).toBe("⏵ 1 · dev/project");
+	});
+
+	it("prefers the agent session and counts busy sessions only", () => {
+		const text = buildFooterText(
+			[
+				{ ...session({ id: "agent", busy: true, lastActivity: "2026-01-01" }) },
+			{ ...session({ id: "watch", busy: true, lastActivity: "2026-01-03" }) },
+			{ ...session({ id: "idle-one", lastActivity: "2026-01-04" }) },
+		],
+			{ agentSessionId: "agent", mode: "auto" },
+		);
+		expect(text).toBe("⏵ 2 · dev/project");
+	});
+
+	it("lists exited session ids when nothing is busy", () => {
+		const text = buildFooterText(
+			[session({ id: "s3", alive: false }), session({ id: "s4", alive: false })],
+			{ agentSessionId: null, mode: "auto" },
+		);
+		expect(text).toBe("✝ s3, s4");
+	});
+});
+
+describe("buildFooterText · minimal mode", () => {
+	it("shows glyph + count of the active state", () => {
+		expect(buildFooterText([session()], { agentSessionId: null, mode: "minimal" })).toBe("◇ 1");
+		expect(buildFooterText([session({ busy: true })], { agentSessionId: null, mode: "minimal" })).toBe("⏵ 1");
+		expect(buildFooterText([session({ alive: false })], { agentSessionId: null, mode: "minimal" })).toBe("✝ 1");
+	});
+
+	it("counts busy sessions preferentially", () => {
+		const text = buildFooterText(
+			[session({ busy: true }), session(), session({ alive: false })],
+			{ agentSessionId: null, mode: "minimal" },
+		);
+		expect(text).toBe("⏵ 1");
+	});
+});
+
+describe("buildFooterText · off mode", () => {
+	it("never renders", () => {
+		expect(
+			buildFooterText([session({ busy: true })], { agentSessionId: null, mode: "off" }),
+		).toBeUndefined();
+	});
+});

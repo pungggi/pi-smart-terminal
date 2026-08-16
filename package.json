@@ -1,6 +1,6 @@
 {
 	"name": "pi-smart-terminal",
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"description": "Persistent PTY terminal sessions for pi: overrides the built-in bash tool with a stateful shell, adds terminal_* tools, a live session overlay (/term) and footer status. Powered by smart-terminal-mcp.",
 	"keywords": [
 		"pi-package",
