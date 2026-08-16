@@ -14,7 +14,7 @@ describe("mergeConfig", () => {
 			overrideBash: false,
 			userBash: true,
 			bashTimeoutMs: 5000,
-			footer: false,
+			footer: "minimal",
 			defaultShell: "pwsh.exe",
 			allToolsActive: true,
 		});
@@ -22,10 +22,22 @@ describe("mergeConfig", () => {
 			overrideBash: false,
 			userBash: true,
 			bashTimeoutMs: 5000,
-			footer: false,
+			footer: "minimal",
 			defaultShell: "pwsh.exe",
 			allToolsActive: true,
 		});
+	});
+
+	it("maps boolean footer values for backward compatibility", () => {
+		expect(mergeConfig({ footer: true }).footer).toBe("full");
+		expect(mergeConfig({ footer: false }).footer).toBe("off");
+	});
+
+	it("accepts all footer modes, rejects unknown strings", () => {
+		for (const mode of ["auto", "minimal", "full", "off"] as const) {
+			expect(mergeConfig({ footer: mode }).footer).toBe(mode);
+		}
+		expect(mergeConfig({ footer: "noisy" }).footer).toBe(DEFAULT_CONFIG.footer);
 	});
 
 	it("ignores unknown keys and invalid values", () => {

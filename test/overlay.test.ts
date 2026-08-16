@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { clampOffset, computeVisibleRange, scrollViewport } from "../src/overlay.js";
+import {
+	clampOffset,
+	computeVisibleRange,
+	nextSessionIndex,
+	scrollPercent,
+	scrollViewport,
+} from "../src/overlay.js";
 
 describe("clampOffset", () => {
 	it("clamps to [0, totalLines-1]", () => {
@@ -29,6 +35,37 @@ describe("scrollViewport", () => {
 			offset: 99,
 			follow: false,
 		});
+	});
+});
+
+describe("nextSessionIndex", () => {
+	it("wraps forward and backward", () => {
+		const ids = ["a", "b", "c"];
+		expect(nextSessionIndex(ids, "a", 1)).toBe(1);
+		expect(nextSessionIndex(ids, "c", 1)).toBe(0);
+		expect(nextSessionIndex(ids, "a", -1)).toBe(2);
+		expect(nextSessionIndex(ids, "b", -1)).toBe(0);
+	});
+
+	it("falls back to the first session when current is unknown", () => {
+		expect(nextSessionIndex(["a", "b"], "gone", 1)).toBe(0);
+		expect(nextSessionIndex([], "a", 1)).toBe(-1);
+	});
+});
+
+describe("scrollPercent", () => {
+	it("returns null at the tail or when nothing is scrollable", () => {
+		expect(scrollPercent({ offset: 0, follow: true }, 100, 10)).toBeNull();
+		expect(scrollPercent({ offset: 5, follow: false }, 5, 10)).toBeNull();
+	});
+
+	it("reports position within the scrollable range", () => {
+		// scrollable = 90; offset 45 → halfway (50%)
+		expect(scrollPercent({ offset: 45, follow: false }, 100, 10)).toBe(50);
+		// at the very top of history
+		expect(scrollPercent({ offset: 90, follow: false }, 100, 10)).toBe(0);
+		// one page short of the tail
+		expect(scrollPercent({ offset: 9, follow: false }, 100, 10)).toBe(90);
 	});
 });
 

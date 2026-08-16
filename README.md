@@ -44,7 +44,7 @@ In short:
   — event-driven, instead of re-dumping logs into the conversation.
 - **You can actually watch it** — `/term` is a live viewer of the agent's shell.
   See what the model is doing in real time, scroll its full history, while the
-  footer shows session, cwd and busy state at a glance.
+  footer shows busy state and cwd at a glance (auto mode stays silent while idle).
 - **Nothing leaks** — all sessions are killed (entire process group) when pi
   exits; no orphaned dev servers after a session.
 
@@ -57,7 +57,7 @@ agent habits transfer 1:1 from Claude Code, Cursor & co.
 
 - **bash override** — built-in `bash` transparently executes in the persistent PTY session (pi's rendering, truncation and timeouts preserved). Falls back to a one-shot shell when the session is busy with a background command.
 - **terminal tools** — 15 `terminal_*` tools matching the MCP server; extras load on demand via `terminal_tools` (pi-native dynamic tool loading).
-- **`/term`** — live session viewer; **footer** — session, cwd and busy state.
+- **`/term`** — live session viewer (Tab / Shift+Tab switches sessions, structured header, three-zone status bar); **footer** — auto shows busy/exited states only.
 - **Shared shell** — opt-in: your `!` commands run in the agent's session too.
 - **Lifecycle** — all PTYs killed (process group) on shutdown; if `node-pty` fails to load, pi starts normally without this extension.
 
@@ -79,7 +79,7 @@ common platforms; on Windows use `npm rebuild node-pty` inside the package if ne
 	"overrideBash": true,
 	"userBash": false,
 	"bashTimeoutMs": 600000,
-	"footer": true,
+	"footer": "auto",
 	"defaultShell": null,
 	"allToolsActive": false
 }
@@ -90,7 +90,7 @@ common platforms; on Windows use `npm rebuild node-pty` inside the package if ne
 | `overrideBash` | `true` | Replace built-in `bash` with the persistent-session backend. |
 | `userBash` | `false` | Route user `!` commands through the shared session (opt-in; full-screen tools like `!vim` are better left native). |
 | `bashTimeoutMs` | `600000` | Hard cap when the model passes no timeout. |
-| `footer` | `true` | Show the footer status line. |
+| `footer` | `"auto"` | Footer status line: `"auto"` (only while a command runs or a session exited), `"minimal"` (always-on glyph + count, e.g. `⏵ 2`), `"full"` (verbose id/name/cwd line), `"off"`. `true`/`false` still work (= `full`/`off`). |
 | `defaultShell` | `null` | Force a shell; `null` = auto-detect (`pwsh > powershell > cmd` on Windows, `$SHELL > bash > sh` elsewhere). |
 | `allToolsActive` | `false` | Register all 15 tools with full schemas instead of lazy loading extras. |
 
@@ -113,7 +113,7 @@ common platforms; on Windows use `npm rebuild node-pty` inside the package if ne
 
 ## Commands
 
-- `/term` — live overlay of a terminal session
+- `/term` — live overlay of terminal sessions (opens the most recent; Tab / Shift+Tab to switch, ↑↓/PgUp/PgDn scroll, `f` follow, `q` close)
 - `/terminals` — list active sessions
 
 ## Tool catalog

@@ -91,6 +91,7 @@ export default function smartTerminalExtension(pi: ExtensionAPI) {
 		const sessions = modules.runtime.runtime.manager?.list({ verbose: true }) ?? [];
 		const text = buildFooterText(sessions, {
 			agentSessionId: modules.runtime.runtime.agentSessionId,
+			mode: config.footer,
 		});
 		ui.setStatus(FOOTER_STATUS_KEY, text);
 	}
@@ -107,7 +108,7 @@ export default function smartTerminalExtension(pi: ExtensionAPI) {
 
 		await registerSessionScoped(ctx.cwd);
 
-		if (config.footer) {
+		if (config.footer !== "off") {
 			refreshFooter(ctx.ui);
 			footerTimer = setInterval(() => refreshFooter(ctx.ui), 2000);
 		}
@@ -130,30 +131,36 @@ export default function smartTerminalExtension(pi: ExtensionAPI) {
 
 	// /term — live session overlay
 	pi.registerCommand("term", {
-		description: "Live view of a terminal session (↑↓/PgUp/PgDn scroll, f follow, q close)",
+		description: "Live view of terminal sessions (Tab switch, ↑↓ scroll, f follow, q close)",
 		handler: async (_args, ctx) => {
 			if (ctx.mode !== "tui" || !modules) {
 				ctx.ui.notify("smart-terminal not available in this mode.", "warning");
 				return;
 			}
 			const manager = modules.runtime.runtime.manager;
-			if (!manager || manager.list().length === 0) {
+			const sessions = manager?.list({ verbose: true }).filter((s) => s.alive) ?? [];
+			if (sessions.length === 0) {
 				ctx.ui.notify("No active terminal sessions yet — run a bash command first.", "info");
 				return;
 			}
 
-			const sessions = manager.list({ verbose: false });
-			let target = sessions[0];
-			if (sessions.length > 1) {
-				const choice = await ctx.ui.select(
-					"Session:",
-					sessions.map((s) => s.id),
-				);
-				if (choice === undefined) return;
-				target = sessions.find((s) => s.id === choice) ?? sessions[0];
-			}
+			// Open the most recently active session directly; switching happens
+			// inside the overlay (Tab / Shift+Tab), no picker prompt.
+			sessions.sort((a, b) => (b.lastActivity ?? "").localeCompare(a.lastActivity ?? ""));
+			const initialId = sessions[0].id;
 
-			const session = manager.get(target.id);
+			const source = {
+				list: () =>
+					(manager?.list({ verbose: false }) ?? []).map((s) => ({ id: s.id, name: s.name })),
+				get: (id: string) => {
+					try {
+						return manager?.get(id);
+					} catch {
+						return undefined;
+					}
+				},
+			};
+
 			const { TerminalView, startPolling, stopPolling } = await import("./overlay.js");
 
 			await ctx.ui.custom((tui, theme, _keybindings, done) => {
@@ -161,7 +168,8 @@ export default function smartTerminalExtension(pi: ExtensionAPI) {
 				let handle: ReturnType<typeof startPolling> | null = null;
 
 				const view = new TerminalView({
-					session,
+					source,
+					initialSessionId: initialId,
 					theme,
 					height: tuiHeight(tui),
 					requestRender,

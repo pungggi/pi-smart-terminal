@@ -8,12 +8,21 @@
  *   "overrideBash": true,
  *   "userBash": false,
  *   "bashTimeoutMs": 600000,
- *   "footer": true,
+ *   "footer": "auto",
  *   "defaultShell": null,
  *   "allToolsActive": false
  * }
  * ```
+ *
+ * `footer` accepts "auto" (show only while busy or after exit), "minimal"
+ * (always-on glyph + count), "full" (verbose line with id/name/cwd) and
+ * "off". Booleans are accepted for backward compatibility: true → "full",
+ * false → "off".
  */
+
+export type FooterMode = "auto" | "minimal" | "full" | "off";
+
+const FOOTER_MODES = new Set<FooterMode>(["auto", "minimal", "full", "off"]);
 
 export interface SmartTerminalConfig {
 	/** Replace the built-in bash tool with a persistent PTY-backed session. */
@@ -22,8 +31,8 @@ export interface SmartTerminalConfig {
 	userBash: boolean;
 	/** Hard cap in ms for a bash command when the model passes no timeout. */
 	bashTimeoutMs: number;
-	/** Show a footer status line with active session info. */
-	footer: boolean;
+	/** Footer status line mode (see FooterMode). */
+	footer: FooterMode;
 	/** Force a specific shell for the agent session (null = auto-detect). */
 	defaultShell: string | null;
 	/** Register all terminal tools active instead of behind the loader. */
@@ -34,7 +43,7 @@ export const DEFAULT_CONFIG: SmartTerminalConfig = {
 	overrideBash: true,
 	userBash: false,
 	bashTimeoutMs: 10 * 60 * 1000,
-	footer: true,
+	footer: "auto",
 	defaultShell: null,
 	allToolsActive: false,
 };
@@ -54,7 +63,10 @@ export function mergeConfig(parsed: unknown, base: SmartTerminalConfig = DEFAULT
 	if (typeof parsed.bashTimeoutMs === "number" && Number.isFinite(parsed.bashTimeoutMs) && parsed.bashTimeoutMs >= 1000) {
 		merged.bashTimeoutMs = Math.floor(parsed.bashTimeoutMs);
 	}
-	if (typeof parsed.footer === "boolean") merged.footer = parsed.footer;
+	if (typeof parsed.footer === "boolean") merged.footer = parsed.footer ? "full" : "off";
+	else if (typeof parsed.footer === "string" && FOOTER_MODES.has(parsed.footer as FooterMode)) {
+		merged.footer = parsed.footer as FooterMode;
+	}
 	if (typeof parsed.defaultShell === "string" && parsed.defaultShell.length > 0) merged.defaultShell = parsed.defaultShell;
 	if (typeof parsed.allToolsActive === "boolean") merged.allToolsActive = parsed.allToolsActive;
 
