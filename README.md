@@ -55,18 +55,11 @@ agent habits transfer 1:1 from Claude Code, Cursor & co.
 
 ## How it integrates
 
-| Layer | Detail |
-|---|---|
-| **bash override** | Built-in `bash` transparently executes in the persistent PTY session. pi's native rendering, truncation and timeout semantics are preserved (pluggable `BashOperations` backend). Busy session (background command)? Falls back to a one-shot shell so the call still succeeds. |
-| **terminal tools** | 15 `terminal_*` tools, matching the MCP server. Extras load on demand via `terminal_tools` using pi-native dynamic tool loading. |
-| **Live overlay** | `/term` — real-time session viewer (scroll `↑↓/PgUp/PgDn`, follow `f`, close `q`). |
-| **Footer status** | `term: ⏵ calm-reef (agent) my/project` — session, cwd drift and busy state. |
-| **Shared shell** | Optional: your `!` commands run in the *same* session the agent uses — one environment, no drift between what you see and what it sees. |
-| **Lifecycle** | `session_shutdown` kills every PTY with its process group — no orphans. |
-
-Works in any model/provider: the persistence lives in the tool backend, not in
-the model's behavior. If `node-pty` cannot load on your platform, pi starts
-normally without this extension (single error notification, nothing breaks).
+- **bash override** — built-in `bash` transparently executes in the persistent PTY session (pi's rendering, truncation and timeouts preserved). Falls back to a one-shot shell when the session is busy with a background command.
+- **terminal tools** — 15 `terminal_*` tools matching the MCP server; extras load on demand via `terminal_tools` (pi-native dynamic tool loading).
+- **`/term`** — live session viewer; **footer** — session, cwd and busy state.
+- **Shared shell** — opt-in: your `!` commands run in the agent's session too.
+- **Lifecycle** — all PTYs killed (process group) on shutdown; if `node-pty` fails to load, pi starts normally without this extension.
 
 ## Install
 
