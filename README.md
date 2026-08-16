@@ -1,23 +1,72 @@
 # pi-smart-terminal
 
-Persistent PTY terminal sessions for [pi](https://pi.dev) — a native extension
-powered by [smart-terminal-mcp](https://github.com/pungggi/smart-terminal-mcp)'s core.
+A real, persistent shell for [pi](https://pi.dev) — the agent's `bash` tool runs in
+a live PTY terminal session instead of a throwaway shell, powered by
+[smart-terminal-mcp](https://github.com/pungggi/smart-terminal-mcp)'s core.
 
-pi's built-in `bash` tool spawns a fresh shell per command: no state, no
-background processes, no interactive programs. This extension replaces it with
-**one persistent PTY-backed shell session** shared across the whole conversation
-— plus the full `terminal_*` tool family, a live session viewer, and footer status.
+## Why
 
-## What you get
+pi's built-in `bash` tool spawns a **fresh shell for every command**. Each call
+runs in a vacuum:
 
-| Layer | Integration |
+```text
+bash: cd packages/api && npm test          # 'cd' is lost instantly — so the agent
+bash: cd packages/api && npm run build     # must chain && cd ../.. into everything
+bash: export API_KEY=...                   # environment gone by the next call
+bash: npm run dev                          # background server: output unreachable,
+                                           # process dead or orphaned after the call
+bash: python                               # REPLs, npm-init prompts, ssh, docker
+                                           # login — anything interactive just hangs
+```
+
+With pi-smart-terminal, `bash` runs in **one persistent PTY session** — same
+shell, same terminal, alive for the whole conversation:
+
+```text
+bash: cd packages/api     # the session is now IN packages/api
+bash: npm test            # just works — no chaining
+bash: export API_KEY=...  # still set on the next call
+bash: npm run dev         # keeps running; new output readable at any time
+                          #   (terminal_read / terminal_wait / terminal_watch)
+/term                     # YOU watch the agent's shell live, as it types
+```
+
+In short:
+
+- **State that sticks** — cwd, environment variables and background processes
+  survive between calls. The agent stops wasting tokens on `cd` chains and
+  absolute paths.
+- **Interactive programs work** — REPLs, installers with prompts, `ssh`,
+  test-watchers: a real TTY means they behave like they do in your own terminal,
+  and the agent can answer prompts with `terminal_write` / `terminal_send_key`.
+- **Long-running processes become usable** — start a dev server once, then read
+  its output incrementally, wait for a "listening on" line, or watch for errors
+  — event-driven, instead of re-dumping logs into the conversation.
+- **You can actually watch it** — `/term` is a live viewer of the agent's shell.
+  See what the model is doing in real time, scroll its full history, while the
+  footer shows session, cwd and busy state at a glance.
+- **Nothing leaks** — all sessions are killed (entire process group) when pi
+  exits; no orphaned dev servers after a session.
+
+The `terminal_*` tool family adds the controls a persistent shell needs
+(`terminal_read`, `terminal_wait`, `terminal_watch`, `terminal_retry`,
+`terminal_diff`, …) — payload-identical to the smart-terminal-mcp tools, so
+agent habits transfer 1:1 from Claude Code, Cursor & co.
+
+## How it integrates
+
+| Layer | Detail |
 |---|---|
-| **bash override** | Built-in `bash` runs in a persistent PTY session — cwd, env vars, background processes and REPLs survive across calls. Keeps pi's native rendering, truncation and timeout semantics (pluggable `BashOperations` backend). |
-| **terminal tools** | 15 `terminal_*` tools (`terminal_start`, `terminal_exec`, `terminal_read`, `terminal_wait`, `terminal_watch`, `terminal_retry`, `terminal_diff`, …). Extras load on demand via `terminal_tools` using pi-native dynamic tool loading — no meta-tool indirection. |
-| **Live overlay** | `/term` opens a real-time viewer of any session: watch agent commands stream in, scroll back, follow the tail (`↑↓/PgUp/PgDn`, `f`, `q`). |
-| **Footer status** | `term: ⏵ calm-reef (agent) my/project` — session, cwd drift and busy state at a glance. |
-| **Shared shell** | Optional: your `!` commands run in the *same* session the agent uses. |
-| **Lifecycle** | Every PTY is killed (process group, Unix) on session shutdown — no orphans when pi exits. |
+| **bash override** | Built-in `bash` transparently executes in the persistent PTY session. pi's native rendering, truncation and timeout semantics are preserved (pluggable `BashOperations` backend). Busy session (background command)? Falls back to a one-shot shell so the call still succeeds. |
+| **terminal tools** | 15 `terminal_*` tools, matching the MCP server. Extras load on demand via `terminal_tools` using pi-native dynamic tool loading. |
+| **Live overlay** | `/term` — real-time session viewer (scroll `↑↓/PgUp/PgDn`, follow `f`, close `q`). |
+| **Footer status** | `term: ⏵ calm-reef (agent) my/project` — session, cwd drift and busy state. |
+| **Shared shell** | Optional: your `!` commands run in the *same* session the agent uses — one environment, no drift between what you see and what it sees. |
+| **Lifecycle** | `session_shutdown` kills every PTY with its process group — no orphans. |
+
+Works in any model/provider: the persistence lives in the tool backend, not in
+the model's behavior. If `node-pty` cannot load on your platform, pi starts
+normally without this extension (single error notification, nothing breaks).
 
 ## Install
 
