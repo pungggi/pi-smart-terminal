@@ -80,6 +80,7 @@ export default function smartTerminalExtension(pi: ExtensionAPI) {
 				promptGuidelines: [
 					...(bashTool.promptGuidelines ?? []),
 					"The bash tool runs in a persistent PTY session: working directory, environment variables and background processes persist across calls. Use terminal_list to inspect sessions and terminal_read to fetch output of commands still running.",
+					"The timeout parameter is in SECONDS. Pass a small value (e.g. 30–120) unless a command genuinely needs longer; multi-line quoted scripts are unreliable in the PTY — rewrite files with the edit/write tools instead of node -e one-liners.",
 				],
 			});
 			lastRegisteredCwd = cwd;
