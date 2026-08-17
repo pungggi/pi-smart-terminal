@@ -21,11 +21,33 @@ import type { SmartTerminalConfig } from "./config.js";
 /** Max lines requested from session.exec; pi's accumulator truncates further. */
 const EXEC_MAX_LINES = 10000;
 
+/**
+ * PSReadLine mishandles fast multi-line writes: each newline acts as Enter,
+ * the paste lands out of order and the closing quote never balances — the
+ * shell wedges at a `>>` continuation prompt forever. Base64 keeps the
+ * payload byte-exact on a single line.
+ */
+export function toPowershellSingleLine(command: string): string {
+	const b64 = Buffer.from(command, "utf8").toString("base64");
+	return `iex ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64}')))`;
+}
+
+/** True when a command needs the powershell single-line treatment. */
+export function needsSingleLine(command: string, shellType: string | undefined): boolean {
+	return (shellType === "powershell" || shellType === "cmd") && /[\r\n]/.test(command);
+}
+
 export function createPtyBashOperations(config: SmartTerminalConfig): BashOperations {
 	return {
 		exec: async (command, cwd, { onData, signal, timeout }) => {
 			const timeoutSecs = timeout;
-			const timeoutMs = timeoutSecs != null ? timeoutSecs * 1000 : config.bashTimeoutMs;
+			// Hard cap: bashTimeoutMs bounds EVERY call, including model-passed
+			// timeouts. Models confuse ms/seconds ("30000" for 30 s) — without
+			// the clamp that becomes an 8-hour wedge.
+			const timeoutMs = Math.min(
+				timeoutSecs != null ? timeoutSecs * 1000 : config.bashTimeoutMs,
+				config.bashTimeoutMs,
+			);
 
 			// Fast path: the shared persistent session.
 			let session = null;
@@ -36,7 +58,10 @@ export function createPtyBashOperations(config: SmartTerminalConfig): BashOperat
 			}
 
 			if (session && !session.busy) {
-				return execInSession(session, command, { onData, signal, timeoutSecs, timeoutMs });
+				const payload = needsSingleLine(command, session.shellType)
+					? toPowershellSingleLine(command)
+					: command;
+				return execInSession(session, payload, { onData, signal, timeoutSecs, timeoutMs });
 			}
 
 			// Session busy (background command / parallel bash call) or unavailable:
@@ -79,7 +104,7 @@ async function execInSession(
 			// Surface partial output before reporting the timeout, matching
 			// the MCP behavior of "still running in the background".
 			if (result.output) ctx.onData(Buffer.from(result.output + "\n"));
-			throw new Error(`timeout:${ctx.timeoutSecs ?? Math.round(ctx.timeoutMs / 1000)}`);
+			throw new Error(`timeout:${Math.max(1, Math.round(ctx.timeoutMs / 1000))}`);
 		}
 
 		const text = [result.output, result.quietExited ? result.hint : null].filter(Boolean).join("\n\n");
@@ -106,7 +131,7 @@ async function execStateless(
 	});
 
 	if (ctx.signal?.aborted) throw new Error("aborted");
-	if (result.timedOut) throw new Error(`timeout:${ctx.timeoutSecs ?? Math.round(ctx.timeoutMs / 1000)}`);
+	if (result.timedOut) throw new Error(`timeout:${Math.max(1, Math.round(ctx.timeoutMs / 1000))}`);
 
 	const text = [result.stdout.raw, result.stderr.raw].filter((s) => s.trim()).join("\n");
 	if (text.trim()) ctx.onData(Buffer.from(text + "\n"));
