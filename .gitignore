@@ -9,3 +9,6 @@ Thumbs.db
 
 # local pi agent telemetry (machine-specific)
 .pi/ghost-autocomplete/
+
+# local support-ticket draft (never publish)
+npm-support-ticket.md
