@@ -12,3 +12,6 @@ Thumbs.db
 
 # local support-ticket draft (never publish)
 npm-support-ticket.md
+
+# local remote-pi pairing/relay state (machine-specific)
+.pi/remote-pi/
