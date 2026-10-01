@@ -6,6 +6,8 @@
  *    (keeps pi's native rendering/truncation via createBashTool operations).
  *  - Registers the terminal_* tool family with pi-native dynamic loading.
  *  - /term live session overlay, /terminals listing, footer status line.
+ *  - Injects live session state into the model context (context_with_system):
+ *    sessionIds and their current cwd survive compaction.
  *  - Optional: routes user `!` commands through the shared session.
  *  - Cleans up every PTY on session_shutdown.
  *
@@ -25,6 +27,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 import { DEFAULT_CONFIG, mergeConfig, type SmartTerminalConfig } from "./config.js";
+import { buildSessionStateSection } from "./context-state.js";
 import { FOOTER_STATUS_KEY, buildFooterText } from "./footer.js";
 import { tuiHeight } from "./overlay.js";
 
@@ -115,6 +118,29 @@ export default function smartTerminalExtension(pi: ExtensionAPI) {
 		}
 	});
 
+	// Live session state in the model context (pi ≥ 0.87 context_with_system):
+	// one trailing system message per request listing live sessions — the
+	// model always knows its sessionIds and their current cwd, even after
+	// compaction. Stateless (never persisted), so history stays clean and the
+	// provider prefix remains cache-stable.
+	pi.on("context_with_system", async (event) => {
+		if (!config.sessionStateContext || !modules) return undefined;
+		const sessions = modules.runtime.runtime.manager?.list({ verbose: true }) ?? [];
+		const section = buildSessionStateSection(sessions);
+		if (!section) return undefined;
+		return {
+			messages: [
+				...event.messages,
+				{
+					role: "system" as const,
+					content: "",
+					sections: { terminal_sessions: section },
+					timestamp: Date.now(),
+				},
+			],
+		};
+	});
+
 	pi.on("session_shutdown", async () => {
 		if (footerTimer) clearInterval(footerTimer);
 		footerTimer = null;
@@ -164,14 +190,17 @@ export default function smartTerminalExtension(pi: ExtensionAPI) {
 
 			const { TerminalView, startPolling, stopPolling } = await import("./overlay.js");
 
-			await ctx.ui.custom((tui, theme, _keybindings, done) => {
+			await ctx.ui.custom((tui, _theme, _keybindings, done) => {
 				const requestRender = () => (tui as { requestRender: () => void }).requestRender();
 				let handle: ReturnType<typeof startPolling> | null = null;
 
 				const view = new TerminalView({
 					source,
 					initialSessionId: initialId,
-					theme,
+					// Live theme getter: the default `system` theme rebuilds when the
+					// terminal switches light/dark; reading per render keeps the
+					// overlay in sync instead of pinning the theme at open time.
+					getTheme: () => ctx.ui.theme,
 					height: tuiHeight(tui),
 					requestRender,
 					done: () => {

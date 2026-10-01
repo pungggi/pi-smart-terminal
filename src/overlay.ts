@@ -81,7 +81,7 @@ export function scrollPercent(
 
 export class TerminalView {
 	private readonly source: SessionSource;
-	private readonly theme: Theme;
+	private readonly getTheme: () => Theme;
 	private readonly requestRender: () => void;
 	private readonly done: () => void;
 	private readonly height: number;
@@ -94,14 +94,16 @@ export class TerminalView {
 	constructor(opts: {
 		source: SessionSource;
 		initialSessionId: string;
-		theme: Theme;
+		/** Live theme accessor — re-read per render so theme rebuilds (system
+		 * theme light/dark switches) apply without reopening the overlay. */
+		getTheme: () => Theme;
 		requestRender: () => void;
 		done: () => void;
 		height: number;
 	}) {
 		this.source = opts.source;
 		this.currentId = opts.initialSessionId;
-		this.theme = opts.theme;
+		this.getTheme = opts.getTheme;
 		this.requestRender = opts.requestRender;
 		this.done = opts.done;
 		this.height = Math.max(6, opts.height);
@@ -171,7 +173,7 @@ export class TerminalView {
 
 	render(width: number): string[] {
 		this.lastRenderWidth = width;
-		const t = this.theme;
+		const t = this.getTheme();
 		const bodyHeight = this.bodyHeight();
 
 		const entries = this.source.list();
@@ -255,7 +257,7 @@ export class TerminalView {
 			// too narrow: drop the keymap zone
 			line = truncateToWidth(` ${left}  ${centre}`, width);
 		}
-		return this.theme.fg("dim", line);
+		return this.getTheme().fg("dim", line);
 	}
 
 	invalidate(): void {
