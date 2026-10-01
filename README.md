@@ -42,6 +42,13 @@ In short:
 - **Long-running processes become usable** — start a dev server once, then read
   its output incrementally, wait for a "listening on" line, or watch for errors
   — event-driven, instead of re-dumping logs into the conversation.
+- **Codemode can drive it** — every tool returns typed `structuredContent`
+  (with an `outputSchema`), so pi's `codemode` scripts and nested
+  `ctx.executeTool()` callers orchestrate sessions programmatically
+  (run → parse → retry loops) without parsing JSON text.
+- **Session state survives compaction** — the live session list (ids, cwd,
+  busy) is injected into the model context on every request, so the model
+  never forgets its sessionIds or their drifted cwd — even after compaction.
 - **You can actually watch it** — `/term` is a live viewer of the agent's shell.
   See what the model is doing in real time, scroll its full history, while the
   footer shows busy state and cwd at a glance (auto mode stays silent while idle).
@@ -56,10 +63,37 @@ agent habits transfer 1:1 from Claude Code, Cursor & co.
 ## How it integrates
 
 - **bash override** — built-in `bash` transparently executes in the persistent PTY session (pi's rendering, truncation and timeouts preserved). Falls back to a one-shot shell when the session is busy with a background command.
-- **terminal tools** — 15 `terminal_*` tools matching the MCP server; extras load on demand via `terminal_tools` (pi-native dynamic tool loading).
+- **terminal tools** — 15 `terminal_*` tools matching the MCP server; extras load on demand via `terminal_tools`, the built-in `tool_search`, or a `defaultTools` pin.
 - **`/term`** — live session viewer (Tab / Shift+Tab switches sessions, structured header, three-zone status bar); **footer** — auto shows busy/exited states only.
 - **Shared shell** — opt-in: your `!` commands run in the agent's session too.
 - **Lifecycle** — all PTYs killed (process group) on shutdown; if `node-pty` fails to load, pi starts normally without this extension.
+
+## Codemode, tool_search and error semantics
+
+The tools are first-class citizens of pi's codemode ecosystem (pi ≥ 0.99):
+
+- **Namespace `smart-terminal`** — codemode scripts find the tools with
+  `searchTools()` and read usage guidance via `describeNamespace("smart-terminal")`.
+- **Structured results** — every tool declares an `outputSchema` and returns
+  `structuredContent`; the model still receives the JSON text you know.
+- **Failure with data** — `terminal_run` (failed success criteria), `terminal_wait`
+  (pattern never appeared) and `terminal_watch` (timeout without a match) return
+  `isError: true` results: the model sees the failure, scripts still get the
+  structured payload. `terminal_exec` keeps exit codes as data (MCP semantics).
+- **Annotations** — observers (`terminal_read/list/wait/watch/get_history/run_paged`)
+  carry `readOnlyHint`, `terminal_stop` / `terminal_write_file` carry
+  `destructiveHint`, so permission extensions can gate them accordingly.
+- **Deferred extras** — the 8 extra tools register with `exposure: "deferred":
+  callable by codemode scripts and findable by the built-in `tool_search` at any
+  time, but never auto-declared to the model. Activate them with the
+  `terminal_tools` loader, or pin e.g. `"defaultTools": ["+terminal_watch"]`
+  (a pin survives; pi ≥ 0.99.2 re-enables it via `/reload` too).
+
+The session-state injection uses pi's `context_with_system` boundary: one
+trailing system message per request carrying a `terminal_sessions` prompt
+section (the same mechanism as pi's `mcp_servers` section). It is stateless —
+never persisted to history — so the transcript stays clean and the provider
+prefix remains cache-stable.
 
 ## Install
 
@@ -67,8 +101,9 @@ agent habits transfer 1:1 from Claude Code, Cursor & co.
 pi install npm:pi-smart-terminal
 ```
 
-Requirements: Node ≥ 20 and a C++ toolchain for `node-pty` (prebuilt binaries cover
-common platforms; on Windows use `npm rebuild node-pty` inside the package if needed).
+Requirements: pi ≥ 0.99.2, Node ≥ 20 and a C++ toolchain for `node-pty` (prebuilt
+binaries cover common platforms; on Windows use `npm rebuild node-pty` inside
+the package if needed).
 
 ## Configuration
 
@@ -81,7 +116,8 @@ common platforms; on Windows use `npm rebuild node-pty` inside the package if ne
 	"bashTimeoutMs": 600000,
 	"footer": "auto",
 	"defaultShell": null,
-	"allToolsActive": false
+	"allToolsActive": false,
+	"sessionStateContext": true
 }
 ```
 
@@ -93,6 +129,7 @@ common platforms; on Windows use `npm rebuild node-pty` inside the package if ne
 | `footer` | `"auto"` | Footer status line: `"auto"` (only while a command runs or a session exited), `"minimal"` (always-on glyph + count, e.g. `⏵ 2`), `"full"` (verbose id/name/cwd line), `"off"`. `true`/`false` still work (= `full`/`off`). |
 | `defaultShell` | `null` | Force a shell; `null` = auto-detect (`pwsh > powershell > cmd` on Windows, `$SHELL > bash > sh` elsewhere). |
 | `allToolsActive` | `false` | Register all 15 tools with full schemas instead of lazy loading extras. |
+| `sessionStateContext` | `true` | Inject live session state (ids, cwd, busy) into the model context each request — survives compaction. |
 
 ## How the bash override behaves
 
@@ -122,9 +159,11 @@ common platforms; on Windows use `npm rebuild node-pty` inside the package if ne
 `terminal_read`, `terminal_write`, `terminal_wait`, `terminal_stop`,
 `terminal_list`, plus the `terminal_tools` loader.
 
-**Loaded on demand:** `terminal_run_paged`, `terminal_retry`, `terminal_diff`,
-`terminal_resize`, `terminal_send_key`, `terminal_get_history`,
-`terminal_write_file`, `terminal_watch`.
+**Deferred (load on demand):** `terminal_run_paged`, `terminal_retry`,
+`terminal_diff`, `terminal_resize`, `terminal_send_key`, `terminal_get_history`,
+`terminal_write_file`, `terminal_watch`. Codemode scripts can call them as-is;
+`tool_search` finds them; `terminal_tools` or a `defaultTools` pin activates
+them for the model.
 
 Payload shapes are identical to the smart-terminal-mcp tools, so agent habits
 transfer 1:1 between pi and MCP clients.

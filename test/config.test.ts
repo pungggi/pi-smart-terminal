@@ -17,6 +17,7 @@ describe("mergeConfig", () => {
 			footer: "minimal",
 			defaultShell: "pwsh.exe",
 			allToolsActive: true,
+			sessionStateContext: false,
 		});
 		expect(merged).toEqual({
 			overrideBash: false,
@@ -25,6 +26,7 @@ describe("mergeConfig", () => {
 			footer: "minimal",
 			defaultShell: "pwsh.exe",
 			allToolsActive: true,
+			sessionStateContext: false,
 		});
 	});
 

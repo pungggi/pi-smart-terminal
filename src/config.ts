@@ -10,7 +10,8 @@
  *   "bashTimeoutMs": 600000,
  *   "footer": "auto",
  *   "defaultShell": null,
- *   "allToolsActive": false
+ *   "allToolsActive": false,
+ *   "sessionStateContext": true
  * }
  * ```
  *
@@ -37,6 +38,8 @@ export interface SmartTerminalConfig {
 	defaultShell: string | null;
 	/** Register all terminal tools active instead of behind the loader. */
 	allToolsActive: boolean;
+	/** Inject live session state (ids/cwd/busy) into the model context each request. */
+	sessionStateContext: boolean;
 }
 
 export const DEFAULT_CONFIG: SmartTerminalConfig = {
@@ -46,6 +49,7 @@ export const DEFAULT_CONFIG: SmartTerminalConfig = {
 	footer: "auto",
 	defaultShell: null,
 	allToolsActive: false,
+	sessionStateContext: true,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -69,6 +73,7 @@ export function mergeConfig(parsed: unknown, base: SmartTerminalConfig = DEFAULT
 	}
 	if (typeof parsed.defaultShell === "string" && parsed.defaultShell.length > 0) merged.defaultShell = parsed.defaultShell;
 	if (typeof parsed.allToolsActive === "boolean") merged.allToolsActive = parsed.allToolsActive;
+	if (typeof parsed.sessionStateContext === "boolean") merged.sessionStateContext = parsed.sessionStateContext;
 
 	return merged;
 }

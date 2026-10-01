@@ -15,3 +15,6 @@ npm-support-ticket.md
 
 # local remote-pi pairing/relay state (machine-specific)
 .pi/remote-pi/
+
+# local agent working state
+.pi/scratch/
