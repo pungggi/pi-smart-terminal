@@ -30,6 +30,7 @@ import { DEFAULT_CONFIG, mergeConfig, type SmartTerminalConfig } from "./config.
 import { buildSessionStateSection } from "./context-state.js";
 import { FOOTER_STATUS_KEY, buildFooterText } from "./footer.js";
 import { tuiHeight } from "./overlay.js";
+import { registerTerminalRenderers } from "./renderers.js";
 
 // These modules transitively import node-pty — loaded lazily in ensureLoaded().
 type LazyModules = {
@@ -40,6 +41,14 @@ type LazyModules = {
 
 export default function smartTerminalExtension(pi: ExtensionAPI) {
 	const config = loadConfigFile();
+
+	// pi ≥ 1.0.1: compact rendering for terminal_* calls, by NAME and
+	// independent of registration — covers deferred tools and terminal_*
+	// calls in resumed sessions / HTML exports even when the tool behind
+	// them is not registered (e.g. after a native load failure). No-op on
+	// older pi; never intercepts bash (the override keeps pi's shell
+	// rendering).
+	registerTerminalRenderers(pi);
 
 	let modules: LazyModules | null = null;
 	let loadError: string | null = null;
