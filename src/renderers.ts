@@ -473,13 +473,15 @@ const TERMINAL_RENDERERS: Record<string, ToolRenderers> = {
 
 	terminal_list: {
 		renderCall: renderCallWith((_args, theme) => callLine(theme, "terminal_list", "")),
-		renderResult: renderResultWith((result, _options, theme) => {
+		renderResult: renderResultWith((result, options, theme) => {
 			const payload = payloadOf(result);
 			if (!payload) return { badge: contextErrorBadge(theme, result) };
 			const sessions = Array.isArray(payload.sessions) ? (payload.sessions as Args[]) : [];
 			const count = num(payload.count) ?? sessions.length;
 			if (count === 0) return { badge: badgeLine(theme, "info", "no sessions") };
-			const shown = sessions.slice(0, 6);
+			// Collapsed keeps the preview compact (the manager caps sessions at
+			// ten); expanded shows every session — nothing stays hidden.
+			const shown = options.expanded ? sessions : sessions.slice(0, 6);
 			const lines = shown.map((s) => {
 				const busy = s.busy === true;
 				const alive = s.alive !== false;
@@ -490,7 +492,7 @@ const TERMINAL_RENDERERS: Record<string, ToolRenderers> = {
 					`${glyph} ${sessionTag(str(s.id) ?? "")}${name ? ` (${name})` : ""} ${pathTail(str(s.cwd))}`,
 				);
 			});
-			const hidden = count - shown.length;
+			const hidden = sessions.length - shown.length;
 			if (hidden > 0) lines.push(theme.fg("muted", `... +${hidden} more`));
 			return { badge: badgeLine(theme, "info", `${count} session${count === 1 ? "" : "s"}`), body: lines.join("\n") };
 		}),

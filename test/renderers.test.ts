@@ -264,6 +264,28 @@ describe("observer tool rendering", () => {
 		expect(text).toContain("✝ s2 (dev)");
 		expect(resultOf("terminal_list", payloadResult({ sessions: [], count: 0 }))).toContain("no sessions");
 	});
+
+	it("terminal_list: collapsed caps at six sessions, expanded shows all", () => {
+		const sessions = Array.from({ length: 10 }, (_, i) => ({
+			id: `s${i + 1}`,
+			name: null,
+			cwd: "/repo",
+			alive: true,
+			busy: false,
+		}));
+		const payload = { sessions, count: 10 };
+
+		const collapsed = resultOf("terminal_list", payloadResult(payload));
+		expect(collapsed).toContain("10 sessions");
+		expect(collapsed).toContain("s6");
+		expect(collapsed).not.toContain("s7 ");
+		expect(collapsed).toContain("+4 more");
+
+		const expanded = resultOf("terminal_list", payloadResult(payload), { expanded: true });
+		expect(expanded).toContain("10 sessions");
+		for (let i = 1; i <= 10; i++) expect(expanded).toContain(`s${i}`);
+		expect(expanded).not.toContain("+");
+	});
 });
 
 describe("lifecycle / mutation tool rendering", () => {
