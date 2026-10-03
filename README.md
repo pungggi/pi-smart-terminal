@@ -64,6 +64,7 @@ agent habits transfer 1:1 from Claude Code, Cursor & co.
 
 - **bash override** — built-in `bash` transparently executes in the persistent PTY session (pi's rendering, truncation and timeouts preserved). Falls back to a one-shot shell when the session is busy with a background command.
 - **terminal tools** — 15 `terminal_*` tools matching the MCP server; extras load on demand via `terminal_tools`, the built-in `tool_search`, or a `defaultTools` pin.
+- **compact tool rendering** — every `terminal_*` call renders as a one-line summary with a status badge (exit code, matched pattern, session count…); on pi ≥ 1.0.1 this uses `pi.registerToolRenderer()`, so calls to deferred/unregistered tools — including `terminal_*` calls in resumed sessions and HTML exports — render compactly too.
 - **`/term`** — live session viewer (Tab / Shift+Tab switches sessions, structured header, three-zone status bar); **footer** — auto shows busy/exited states only.
 - **Shared shell** — opt-in: your `!` commands run in the agent's session too.
 - **Lifecycle** — all PTYs killed (process group) on shutdown; if `node-pty` fails to load, pi starts normally without this extension.
@@ -88,6 +89,16 @@ The tools are first-class citizens of pi's codemode ecosystem (pi ≥ 0.99):
   time, but never auto-declared to the model. Activate them with the
   `terminal_tools` loader, or pin e.g. `"defaultTools": ["+terminal_watch"]`
   (a pin survives; pi ≥ 0.99.2 re-enables it via `/reload` too).
+- **Compact rendering (pi ≥ 1.0.1)** — `pi.registerToolRenderer()` draws every
+  `terminal_*` call as a one-line summary plus a status badge: exit code and
+  drifted cwd for `terminal_exec`/`terminal_retry`, match result for
+  `terminal_wait`/`terminal_watch`, session count for `terminal_list`,
+  colored `+`/`−` stats for `terminal_diff`. Because the resolver works by
+  tool name rather than registration, it also renders calls to deferred tools
+  that were never activated, and `terminal_*` calls in resumed sessions and
+  HTML exports — even when the tool behind them is not registered (rendering
+  is display-only and independent of the native PTY chain). On older pi the
+  registration is skipped and pi's default rendering applies.
 
 The session-state injection uses pi's `context_with_system` boundary: one
 trailing system message per request carrying a `terminal_sessions` prompt
@@ -101,7 +112,7 @@ prefix remains cache-stable.
 pi install npm:pi-smart-terminal
 ```
 
-Requirements: pi ≥ 0.99.2, Node ≥ 20 and a C++ toolchain for `node-pty` (prebuilt
+Requirements: pi ≥ 0.99.2 (compact `terminal_*` rendering via `registerToolRenderer` on pi ≥ 1.0.1), Node ≥ 20 and a C++ toolchain for `node-pty` (prebuilt
 binaries cover common platforms; on Windows use `npm rebuild node-pty` inside
 the package if needed).
 
