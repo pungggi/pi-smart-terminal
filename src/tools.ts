@@ -76,6 +76,7 @@ export const TERMINAL_NAMESPACE: ToolNamespace = {
 		"Persistent PTY terminal sessions. One session = one live shell: cwd, environment variables and background processes persist across calls.",
 		"Start with terminal_start once, then pass the returned sessionId to terminal_exec / terminal_read / terminal_write.",
 		"terminal_read accepts `since` (byte position from the previous read) for incremental output; re-dumping whole logs wastes context.",
+		"terminal_wait matches only NEW output by default (the echoed command line never matches); pass `since` to scan retained history from a position.",
 		"Long-running processes (dev servers, watchers): start them, then poll incrementally with terminal_read, or block until a pattern with terminal_wait / terminal_watch.",
 		"terminal_stop kills the whole process group of a session; use it to clean up dev servers.",
 	].join("\n"),
@@ -344,7 +345,8 @@ export function registerTerminalTools(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "terminal_wait",
 		label: "Terminal wait",
-		description: "Wait for a pattern to appear in session output (replaces poll loops).",
+		description:
+			"Wait for a pattern in NEW session output (echoed input never matches). Use instead of poll loops.",
 		promptSnippet: "Wait for patterns in terminal output instead of polling",
 		namespace: TERMINAL_NAMESPACE,
 		annotations: ANNOTATION_READ_ONLY,
@@ -352,6 +354,8 @@ export function registerTerminalTools(pi: ExtensionAPI): void {
 			output: Type.String(),
 			matched: Type.Boolean(),
 			timedOut: Type.Boolean(),
+			// Present with smart-terminal-mcp >= 1.2.40; optional so older ^1.2.x installs still validate.
+			position: Type.Optional(Type.Number()),
 		}),
 		parameters: Type.Object({
 			sessionId: Type.String(),
@@ -359,6 +363,12 @@ export function registerTerminalTools(pi: ExtensionAPI): void {
 			timeout: num({ min: 1000, max: 600000 }),
 			returnMode: Type.Optional(StringEnum(["tail", "full", "match-only"] as const)),
 			tailLines: num({ min: 1, max: 1000 }),
+			since: Type.Optional(
+				num({
+					min: 0,
+					description: "Char position to match after; default is the stream end at call time",
+				}),
+			),
 		}),
 		async execute(_id, params) {
 			const session = manager().get(params.sessionId);
@@ -367,6 +377,7 @@ export function registerTerminalTools(pi: ExtensionAPI): void {
 				timeout: params.timeout ?? 30000,
 				returnMode: params.returnMode ?? "tail",
 				tailLines: params.tailLines ?? 50,
+				since: params.since,
 			});
 			// The pattern never appeared: report failure (with the tail as data).
 			return structured(result, !result.matched);

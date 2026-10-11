@@ -99,6 +99,18 @@ describe("registerTerminalTools (pi ≥ 0.99 metadata)", () => {
 		expect(byName.get("terminal_write_file")?.annotations?.destructiveHint).toBe(true);
 	});
 
+	it("exposes since on terminal_wait and tolerates pre-1.2.40 results", () => {
+		const wait = byName.get("terminal_wait")! as {
+			parameters?: { properties?: Record<string, { type?: string }> };
+			outputSchema?: { properties?: Record<string, { type?: string | string[] }> };
+		};
+		expect(wait.parameters?.properties?.since?.type).toBe("number");
+		// position arrives with smart-terminal-mcp >= 1.2.40; must stay optional so
+		// older ^1.2.x installs (no position field) still validate.
+		expect(wait.outputSchema?.properties?.position).toMatchObject({ type: "number" });
+		expect(JSON.stringify(wait.outputSchema)).not.toMatch(/"required"\s*:\s*\[[^\]]*"position"/);
+	});
+
 	it("returns structuredContent alongside the JSON text content", async () => {
 		const loader = byName.get("terminal_tools")!;
 		const result = (await loader.execute("t1", { list: true })) as {
