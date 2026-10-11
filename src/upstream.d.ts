@@ -114,7 +114,8 @@ declare module "smart-terminal-mcp/src/pty-session.js" {
 			timeout?: number;
 			returnMode?: "tail" | "full" | "match-only";
 			tailLines?: number;
-			/** Match after this absolute char position; defaults to the stream end at call time. */
+			/** Match after this absolute char position; defaults to the stream end at call time.
+			 * A position beyond the stream end is honored as a future cursor. */
 			since?: number;
 		}): Promise<WaitResult>;
 		watch(opts: {
