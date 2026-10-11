@@ -27,6 +27,8 @@ declare module "smart-terminal-mcp/src/pty-session.js" {
 		output: string;
 		matched: boolean;
 		timedOut: boolean;
+		/** Current stream position for chaining (since-matching waits). */
+		position: number;
 	}
 
 	export interface WatchResult {
@@ -112,6 +114,9 @@ declare module "smart-terminal-mcp/src/pty-session.js" {
 			timeout?: number;
 			returnMode?: "tail" | "full" | "match-only";
 			tailLines?: number;
+			/** Match after this absolute char position; defaults to the stream end at call time.
+			 * A position beyond the stream end is honored as a future cursor. */
+			since?: number;
 		}): Promise<WaitResult>;
 		watch(opts: {
 			triggers: Array<{ id: string; pattern: string; isRegex?: boolean; cooldownMs?: number }>;
