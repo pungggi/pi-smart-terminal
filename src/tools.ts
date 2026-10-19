@@ -26,6 +26,7 @@ import { StringEnum } from "@earendil-works/pi-ai";
 
 import {
 	DEFAULT_EXEC_MAX_LINES,
+	DEFAULT_EXEC_MAX_BYTES,
 	DEFAULT_HISTORY_LIMIT,
 	DEFAULT_MAX_OUTPUT_BYTES,
 	DEFAULT_PAGE_SIZE,
@@ -211,7 +212,7 @@ export function registerTerminalTools(pi: ExtensionAPI): void {
 		name: "terminal_exec",
 		label: "Terminal exec",
 		description:
-			"Run a command in a session and wait for completion (marker-based). Reports exit code and current directory.",
+			"Run a command in a session and wait for completion (marker-based). Reports exit code and current directory. Multi-line here-strings (@'...'@) and heredocs (<<EOF) are rejected — they never survive the PTY; write the payload to a file (terminal_write_file) and pass --body-file / < file / Get-Content instead.",
 		promptSnippet: "Run commands in a persistent terminal session",
 		namespace: TERMINAL_NAMESPACE,
 		annotations: ANNOTATION_EXEC,
@@ -221,6 +222,7 @@ export function registerTerminalTools(pi: ExtensionAPI): void {
 			command: Type.String(),
 			timeout: num({ min: 1000, max: 600000 }),
 			maxLines: num({ min: 10, max: 10000 }),
+			maxOutputBytes: num({ min: 1024, max: 1048576, description: "Total output byte cap (head+notice+tail when exceeded)" }),
 			quietExitMs: num({ min: 500, max: 600000, description: "Exit if silent for N ms" }),
 			minOutputBytes: num({ min: 0, description: "Min bytes before quiet exit" }),
 		}),
@@ -230,6 +232,7 @@ export function registerTerminalTools(pi: ExtensionAPI): void {
 				command: params.command,
 				timeout: params.timeout ?? 30000,
 				maxLines: params.maxLines ?? DEFAULT_EXEC_MAX_LINES,
+				maxOutputBytes: params.maxOutputBytes ?? DEFAULT_EXEC_MAX_BYTES,
 				quietExitMs: params.quietExitMs,
 				minOutputBytes: params.minOutputBytes ?? 1,
 			});
