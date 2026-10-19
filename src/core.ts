@@ -29,6 +29,7 @@ export { execWithRetry, execAndDiff } from "smart-terminal-mcp/src/smart-tools.j
 
 export {
 	DEFAULT_EXEC_MAX_LINES,
+	DEFAULT_EXEC_MAX_BYTES,
 	DEFAULT_READ_MAX_LINES,
 	DEFAULT_HISTORY_LIMIT,
 	SUPPORTED_KEYS,

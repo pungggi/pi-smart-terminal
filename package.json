@@ -1,6 +1,6 @@
 {
 	"name": "pi-smart-terminal",
-	"version": "0.5.0",
+	"version": "0.5.1",
 	"description": "Persistent PTY terminal sessions for pi: overrides the built-in bash tool with a stateful shell, adds terminal_* tools, a live session overlay (/term) and footer status. Powered by smart-terminal-mcp.",
 	"keywords": [
 		"pi-package",
@@ -37,7 +37,7 @@
 		"node-pty": true
 	},
 	"dependencies": {
-		"smart-terminal-mcp": "^1.2.37"
+		"smart-terminal-mcp": "^1.2.41"
 	},
 	"peerDependencies": {
 		"@earendil-works/pi-coding-agent": ">=0.99.2",

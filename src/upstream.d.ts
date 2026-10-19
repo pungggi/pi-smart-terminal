@@ -73,6 +73,7 @@ declare module "smart-terminal-mcp/src/pty-session.js" {
 		command: string;
 		timeout?: number;
 		maxLines?: number;
+		maxOutputBytes?: number;
 		quietExitMs?: number;
 		minOutputBytes?: number;
 		sendNotification?: (notification: unknown) => void;
@@ -138,6 +139,7 @@ declare module "smart-terminal-mcp/src/pty-session.js" {
 	}
 
 	export const DEFAULT_EXEC_MAX_LINES: number;
+	export const DEFAULT_EXEC_MAX_BYTES: number;
 	export const DEFAULT_READ_MAX_LINES: number;
 	export const DEFAULT_HISTORY_LIMIT: number;
 	export const SUPPORTED_KEYS: string[];

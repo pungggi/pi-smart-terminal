@@ -159,6 +159,33 @@ the package if needed).
   the session; read new output with `terminal_read({ since })`, wait for
   patterns with `terminal_wait` / `terminal_watch`, and watch it live in `/term`.
 
+## Multi-line payloads (here-strings, heredocs)
+
+The PTY feeds the shell line by line, so multi-line shell constructs pasted in
+one go get mangled:
+
+- **PowerShell here-strings** (`@'...'@`): PSReadLine can eat the `@'` opener
+  mid-paste, and every apostrophe in the body then breaks parsing
+  (`Unexpected token ...`).
+- **POSIX heredocs** (`<<EOF`): the completion markers `terminal_exec` appends
+  land on the closing-delimiter line, so the heredoc never terminates and the
+  session hangs until the timeout.
+
+That's why `terminal_exec` (and the `bash` override, which uses the same
+path) **rejects them up front** with the workaround instead of hanging the
+session. Do this instead:
+
+1. Write the payload to a file: the `write` tool, or `terminal_write_file`
+   (resolves relative paths against the session's drifted cwd).
+2. Reference the file: `gh pr create --body-file .pr-body.md`,
+   `command < input.txt`, or `--body "$(Get-Content file -Raw)"`.
+
+`terminal_run` is unaffected: it spawns a one-shot process with no PTY and no
+markers, so heredocs genuinely work there. And if a command ever times out
+with the shell stuck at a continuation prompt (`>>` / `>` / `More?`), the
+result's `hint` names the prompt and how to recover: send the closing line
+with `terminal_write`, or abort with `terminal_send_key("ctrl+c")`.
+
 ## Commands
 
 - `/term` — live overlay of terminal sessions (opens the most recent; Tab / Shift+Tab to switch, ↑↓/PgUp/PgDn scroll, `f` follow, `q` close)
