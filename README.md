@@ -138,7 +138,7 @@ the package if needed).
 | `userBash` | `false` | Route user `!` commands through the shared session (opt-in; full-screen tools like `!vim` are better left native). |
 | `bashTimeoutMs` | `600000` | Hard cap when the model passes no timeout. |
 | `footer` | `"auto"` | Footer status line: `"auto"` (only while a command runs or a session exited), `"minimal"` (always-on glyph + count, e.g. `⏵ 2`), `"full"` (verbose id/name/cwd line), `"off"`. `true`/`false` still work (= `full`/`off`). |
-| `defaultShell` | `null` | Force a shell; `null` = auto-detect (`pwsh > powershell > cmd` on Windows, `$SHELL > bash > sh` elsewhere). |
+| `defaultShell` | `null` | Force the shell for every session in this process; `null` = auto-detect (`pwsh > powershell > cmd` on Windows, `$SHELL > bash > sh` elsewhere). The `PI_TERMINAL_SHELL` env var wins over this key. |
 | `allToolsActive` | `false` | Register all 15 tools with full schemas instead of lazy loading extras. |
 | `sessionStateContext` | `true` | Inject live session state (ids, cwd, busy) into the model context each request — survives compaction. |
 
@@ -151,13 +151,72 @@ the package if needed).
   the footer, or reset with `terminal_stop` + a fresh bash call.
 - **Parallel bash calls / busy session** (a background command is running):
   transparently falls back to a one-shot stateless execution so the call
-  still succeeds.
+  still succeeds. The fallback runs in the *same* pinned shell and announces
+  itself with a trailing notice line, so nothing ever switches dialect
+  silently (see [Which shell do I get?](#which-shell-do-i-get)).
 - **Timeout** (`timeout:N`) and **abort** (Esc → `ctrl+c` to the PTY) map onto
   pi's native error formats; partial output is preserved.
 - **Long-running commands** (dev servers): use `terminal_exec` with
   `quietExitMs`, or let a bash call time out — the command keeps running in
   the session; read new output with `terminal_read({ since })`, wait for
   patterns with `terminal_wait` / `terminal_watch`, and watch it live in `/term`.
+
+## Which shell do I get?
+
+Exactly one shell per pi process: chosen on first use, then pinned for the
+whole session. Determinism is the point. A command string that worked a minute
+ago must not start failing because the shell silently changed underneath it.
+
+**Resolution order** (first match wins):
+
+1. `PI_TERMINAL_SHELL` env var: `powershell`, `cmd`, `bash`, any name on PATH,
+   or an absolute path.
+2. `defaultShell` in `~/.pi/agent/smart-terminal.json`.
+3. Auto-detect: `pwsh > powershell > cmd` on Windows, `$SHELL > bash > sh`
+   elsewhere.
+
+**Guarantees:**
+
+- **Pinned once per process**: the first resolution is memoized, so a PATH
+  change, a session restart or a cwd switch can never flip the shell
+  mid-conversation.
+- **Invalid pin fails loudly**: a typo reports the bad value plus what
+  auto-detect would pick, instead of quietly reverting. Quiet reverting would
+  recreate the exact surprise the pin exists to remove.
+- **Every path shares the pin**: the agent session, `terminal_start` without a
+  `shell` argument, and the one-shot fallback for busy sessions all run the
+  same shell. Before this, the fallback used the platform shell (cmd.exe on
+  Windows), which is how commands flipped between PowerShell and cmd.exe
+  mid-session.
+- **`-NoProfile` survives**: a pinned PowerShell keeps `-NoLogo -NoProfile`,
+  so a user profile cannot change aliases or prompts behind the agent's back.
+  This matters because profiles vary per machine and would reintroduce the
+  nondeterminism the pin is meant to remove.
+
+### Knowing the shell from the outside
+
+- **Prompt guideline**: the bash tool's prompt declares the dialect plus a
+  concrete example (`The bash tool runs in one persistent PowerShell session
+  (...)`), so the agent writes correct syntax before its first command.
+- **Env vars**: `PI_SHELL` (executable) and `PI_SHELL_TYPE` (`powershell` |
+  `cmd` | `bash`) are exported when the shell resolves. Child processes (the
+  fallback, `terminal_run`, your own scripts) can branch on them instead of
+  guessing.
+- **Tool payloads**: `terminal_start` and `terminal_list` return `shell` and
+  `shellType` per session, and the per-request `terminal_sessions` context
+  section lists each live session's dialect.
+
+### Degradation is announced, not silent
+
+When the shared session is busy (parallel bash call, background command), the
+call still runs as a stateless one-shot in the same shell, and the result ends
+with a notice line naming that shell plus a reminder that `cd` and env from the
+shared session do not apply. This turns a confusing "the shell changed" report
+into a diagnosable event.
+
+One deliberate exception: `terminal_run` with `shell: true` is documented as a
+one-shot against the *system shell* (cmd.exe on Windows). Pass `shell: false`
+and an explicit executable when you need the pinned shell's semantics.
 
 ## Multi-line payloads (here-strings, heredocs)
 
@@ -170,6 +229,9 @@ one go get mangled:
 - **POSIX heredocs** (`<<EOF`): the completion markers `terminal_exec` appends
   land on the closing-delimiter line, so the heredoc never terminates and the
   session hangs until the timeout.
+- **cmd.exe multi-line**: rejected up front with the same workaround. PowerShell
+  gets a byte-exact base64 wrapper for multi-line payloads; cmd.exe has no
+  equivalent, so a script typed line by line can wedge the prompt at `More?`.
 
 That's why `terminal_exec` (and the `bash` override, which uses the same
 path) **rejects them up front** with the workaround instead of hanging the

@@ -6,8 +6,8 @@
  * only requires changes here.
  */
 
+export { PtySession } from "smart-terminal-mcp/src/pty-session.js";
 export type {
-	PtySession,
 	ExecResult,
 	ReadResult,
 	WaitResult,
@@ -18,6 +18,9 @@ export type {
 } from "smart-terminal-mcp/src/pty-session.js";
 
 export { SessionManager } from "smart-terminal-mcp/src/session-manager.js";
+export type { PtySessionOptions } from "smart-terminal-mcp/src/pty-session.js";
+
+export { detectShell, getShellType, isAvailable } from "smart-terminal-mcp/src/shell-detector.js";
 
 export { runCommand, DEFAULT_TIMEOUT_MS, DEFAULT_MAX_OUTPUT_BYTES } from "smart-terminal-mcp/src/command-runner.js";
 

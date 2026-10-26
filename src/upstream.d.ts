@@ -7,6 +7,18 @@
  */
 
 declare module "smart-terminal-mcp/src/pty-session.js" {
+	/** Constructor options SessionManager passes to the SessionClass. */
+	export interface PtySessionOptions {
+		id: string;
+		shell: string;
+		shellArgs: string[];
+		cols: number;
+		rows: number;
+		cwd: string;
+		name?: string;
+		env?: Record<string, string>;
+	}
+
 	export interface ExecResult {
 		output: string;
 		exitCode: number | null;
@@ -90,16 +102,7 @@ declare module "smart-terminal-mcp/src/pty-session.js" {
 		cwd: string;
 		alive: boolean;
 		busy: boolean;
-		constructor(opts: {
-			id: string;
-			shell: string;
-			shellArgs: string[];
-			cols: number;
-			rows: number;
-			cwd: string;
-			name?: string;
-			env?: Record<string, string>;
-		});
+		constructor(opts: PtySessionOptions);
 		waitForBanner(): Promise<string>;
 		exec(opts: ExecOptions): Promise<ExecResult>;
 		write(data: string): void;
@@ -145,11 +148,20 @@ declare module "smart-terminal-mcp/src/pty-session.js" {
 	export const SUPPORTED_KEYS: string[];
 }
 
+declare module "smart-terminal-mcp/src/shell-detector.js" {
+	/** Check whether an executable resolves on PATH (`which`/`where`). */
+	export function isAvailable(exe: string): boolean;
+	/** Platform best-guess: pwsh > powershell > cmd on Windows, $SHELL > bash > sh elsewhere. */
+	export function detectShell(): { shell: string; args: string[] };
+	/** Classify a shell path/name into the dialect commands must use. */
+	export function getShellType(shell: string): "powershell" | "cmd" | "bash";
+}
+
 declare module "smart-terminal-mcp/src/session-manager.js" {
-	import type { PtySession, SessionInfo } from "smart-terminal-mcp/src/pty-session.js";
+	import type { PtySession, PtySessionOptions, SessionInfo } from "smart-terminal-mcp/src/pty-session.js";
 
 	export class SessionManager {
-		constructor(opts?: { SessionClass?: new (opts: never) => PtySession });
+		constructor(opts?: { SessionClass?: new (opts: PtySessionOptions) => PtySession });
 		create(opts?: {
 			shell?: string;
 			cols?: number;

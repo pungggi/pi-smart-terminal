@@ -37,6 +37,7 @@ type LazyModules = {
 	tools: typeof import("./tools.js");
 	bashBackend: typeof import("./bash-backend.js");
 	runtime: typeof import("./runtime.js");
+	shell: typeof import("./shell.js");
 };
 
 export default function smartTerminalExtension(pi: ExtensionAPI) {
@@ -62,12 +63,13 @@ export default function smartTerminalExtension(pi: ExtensionAPI) {
 				// Probe the native chain first so a missing/incompatible native
 				// build surfaces here instead of breaking half the extension.
 				await import("./core.js");
-				const [tools, bashBackend, runtime] = await Promise.all([
+				const [tools, bashBackend, runtime, shell] = await Promise.all([
 					import("./tools.js"),
 					import("./bash-backend.js"),
 					import("./runtime.js"),
+					import("./shell.js"),
 				]);
-				modules = { tools, bashBackend, runtime };
+				modules = { tools, bashBackend, runtime, shell };
 			} catch (err) {
 				loadError = (err as Error)?.message ?? String(err);
 			}
@@ -79,7 +81,7 @@ export default function smartTerminalExtension(pi: ExtensionAPI) {
 		if (!modules) return;
 
 		// terminal tools + loader (idempotent re-registration per session)
-		modules.tools.registerTerminalTools(pi);
+		modules.tools.registerTerminalTools(pi, config);
 		modules.tools.applyInitialActiveTools(pi, config.allToolsActive);
 
 		// Bash override: pi's native bash tool with a persistent PTY backend.
@@ -87,10 +89,16 @@ export default function smartTerminalExtension(pi: ExtensionAPI) {
 		if (config.overrideBash && cwd !== lastRegisteredCwd) {
 			const operations = modules.bashBackend.createPtyBashOperations(config);
 			const bashTool = createBashToolDefinition(cwd, { operations });
+			// Name the shell up front: agents write command strings against the
+			// dialect they expect, so knowing it before the first call removes a
+			// whole class of PowerShell/cmd trial and error. Null only when the
+			// pin is invalid — that error then surfaces on the first bash call.
+			const shellNote = modules.shell.shellGuideline(config.defaultShell);
 			pi.registerTool({
 				...bashTool,
 				promptGuidelines: [
 					...(bashTool.promptGuidelines ?? []),
+					...(shellNote ? [shellNote] : []),
 					"The bash tool runs in a persistent PTY session: working directory, environment variables and background processes persist across calls. Use terminal_list to inspect sessions and terminal_read to fetch output of commands still running.",
 					"The timeout parameter is in SECONDS. Pass a small value (e.g. 30–120) unless a command genuinely needs longer; multi-line quoted scripts are unreliable in the PTY — rewrite files with the edit/write tools instead of node -e one-liners.",
 				],

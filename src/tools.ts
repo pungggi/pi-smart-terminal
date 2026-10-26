@@ -39,7 +39,9 @@ import {
 	runCommand,
 	summarizeCommandOutput,
 } from "./core.js";
-import { clearAgentSession, runtime } from "./runtime.js";
+import { DEFAULT_CONFIG, mergeConfig, type SmartTerminalConfig } from "./config.js";
+import { clearAgentSession, ensureManager } from "./runtime.js";
+import { getResolvedShell, sessionShell } from "./shell.js";
 import { assertPagedCommandIsReadOnly } from "./command-guards.js";
 
 /** Core tools are active from the start. */
@@ -89,14 +91,11 @@ const ANNOTATION_MUTATING: ToolAnnotations = { destructiveHint: false, openWorld
 const ANNOTATION_EXEC: ToolAnnotations = { destructiveHint: false, openWorldHint: true };
 const ANNOTATION_DESTRUCTIVE: ToolAnnotations = { destructiveHint: true, openWorldHint: true };
 
-import * as coreModule from "./core.js";
-
-function manager() {
-	if (!runtime.manager) {
-		runtime.manager = new coreModule.SessionManager();
-	}
-	return runtime.manager;
-}
+/**
+ * The one SessionManager for this process (pinned shell-args session class).
+ * Kept as a function so call sites read `manager()` unchanged.
+ */
+const manager = ensureManager;
 
 /**
  * Model-facing content stays the JSON text (unchanged behavior); programmatic
@@ -156,12 +155,16 @@ const sessionInfoSchema = Type.Object({
 	idleSeconds: Type.Optional(Type.Number()),
 });
 
-export function registerTerminalTools(pi: ExtensionAPI): void {
+export function registerTerminalTools(
+	pi: ExtensionAPI,
+	config: SmartTerminalConfig = DEFAULT_CONFIG,
+): void {
 	// --- terminal_start ---
 	pi.registerTool({
 		name: "terminal_start",
 		label: "Terminal start",
-		description: "Start a new interactive terminal session (auto-detects the shell). Returns sessionId.",
+		description:
+			"Start a new interactive terminal session (auto-detects the shell, or follows the PI_TERMINAL_SHELL / defaultShell pin). Returns sessionId.",
 		promptSnippet: "Start persistent interactive terminal sessions",
 		namespace: TERMINAL_NAMESPACE,
 		annotations: ANNOTATION_MUTATING,
@@ -181,9 +184,14 @@ export function registerTerminalTools(pi: ExtensionAPI): void {
 			env: Type.Optional(Type.Record(Type.String(), Type.String())),
 		}),
 		async execute(_id, params) {
+			// No shell argument → the process-wide pin (same decision the bash
+			// override makes), so every session in this pi process agrees on one
+			// shell. Resolved outside the try: an invalid pin must surface its own
+			// actionable error, not the "omit the shell parameter" hint below.
+			const pinnedShell = params.shell ?? sessionShell(getResolvedShell(config.defaultShell));
 			try {
 				const session = await manager().create({
-					shell: params.shell,
+					shell: pinnedShell,
 					cols: params.cols ?? 120,
 					rows: params.rows ?? 30,
 					cwd: params.cwd,

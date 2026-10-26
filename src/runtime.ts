@@ -6,10 +6,33 @@
  * timers or PTYs.
  */
 
-import { SessionManager, type PtySession } from "./core.js";
+import { PtySession, SessionManager, type PtySessionOptions } from "./core.js";
+import { shellArgsFor } from "./shell.js";
 
 export { SessionManager };
 export type { PtySession };
+
+/**
+ * Upstream `SessionManager.create()` passes `shellArgs: []` whenever an
+ * explicit shell is given, which would drop `-NoLogo -NoProfile` from a
+ * pinned PowerShell and let the user's profile (aliases, prompt, PSReadLine)
+ * change command semantics — the opposite of the determinism a pin promises.
+ *
+ * This SessionClass restores the non-interactive flags for the PowerShell
+ * family. For every other shell, and for auto-detected sessions (upstream
+ * already supplies the flags there), it is a no-op.
+ */
+class PinnedPtySession extends PtySession {
+	constructor(opts: PtySessionOptions) {
+		super({ ...opts, shellArgs: opts.shellArgs?.length ? opts.shellArgs : shellArgsFor(opts.shell) });
+	}
+}
+
+/** The one SessionManager for this process: pinned-args session class, lazily built. */
+export function ensureManager(): SessionManager {
+	runtime.manager ??= new SessionManager({ SessionClass: PinnedPtySession });
+	return runtime.manager;
+}
 
 export interface SmartTerminalRuntime {
 	manager: SessionManager | null;
@@ -37,8 +60,7 @@ export interface EnsureSessionOptions {
  *   session's own cwd is authoritative, so `cd` persistence works.
  */
 export async function getOrCreateAgentSession(opts: EnsureSessionOptions): Promise<PtySession> {
-	if (!runtime.manager) runtime.manager = new SessionManager();
-	const manager = runtime.manager;
+	const manager = ensureManager();
 
 	let session: PtySession | null = null;
 	if (runtime.agentSessionId) {
