@@ -15,6 +15,11 @@
  * }
  * ```
  *
+ * `defaultShell` pins the shell for every session in this process; the
+ * `PI_TERMINAL_SHELL` env var wins over it (see ./shell.js for the full
+ * resolution order). Both are resolved once and memoized, so the pin cannot
+ * drift mid-session.
+ *
  * `footer` accepts "auto" (show only while busy or after exit), "minimal"
  * (always-on glyph + count), "full" (verbose line with id/name/cwd) and
  * "off". Booleans are accepted for backward compatibility: true → "full",

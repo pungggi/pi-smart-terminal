@@ -16,6 +16,13 @@ import type { BashOperations } from "@earendil-works/pi-coding-agent";
 
 import { runCommand } from "./core.js";
 import { getOrCreateAgentSession } from "./runtime.js";
+import {
+	assertSupportedInShell,
+	getResolvedShell,
+	sessionShell,
+	shellDialect,
+	type ResolvedShell,
+} from "./shell.js";
 import type { SmartTerminalConfig } from "./config.js";
 
 /** Max lines requested from session.exec; pi's accumulator truncates further. */
@@ -37,6 +44,83 @@ export function needsSingleLine(command: string, shellType: string | undefined):
 	return (shellType === "powershell" || shellType === "cmd") && /[\r\n]/.test(command);
 }
 
+/**
+ * Byte-exact single-line encoding for `-EncodedCommand`: base64 over UTF-16LE,
+ * which is the wire format PowerShell expects. No quoting rules can mangle it,
+ * so it is safe for arbitrary payloads in a one-shot (non-PTY) spawn.
+ */
+export function toPowershellEncodedCommand(script: string): string {
+	return Buffer.from(script, "utf16le").toString("base64");
+}
+
+/**
+ * One-shot PowerShell script: runs the command and exits with its code.
+ *
+ * `powershell -Command` reports 0 unless the script calls `exit`, so a failing
+ * command would look successful to pi's bash tool. This mirrors the session
+ * wrapper in smart-terminal-mcp: derive the code from `$?` / `$LASTEXITCODE`
+ * exactly the way the PTY path does, keeping both paths' exit semantics equal.
+ */
+/**
+ * One-shot PowerShell script: runs the command and exits with its code.
+ *
+ * `powershell -Command` reports 0 unless the script calls `exit`, so a failing
+ * command would look successful to pi's bash tool. This mirrors the session
+ * wrapper in smart-terminal-mcp: derive the code from `$?` / `$LASTEXITCODE`
+ * exactly the way the PTY path does, keeping both paths' exit semantics equal.
+ *
+ * The first line forces UTF-8 for redirected stdout: Windows PowerShell 5.1
+ * writes piped output in the OEM console codepage, which mangles non-ASCII
+ * before the bytes ever reach the agent (pwsh 7 already defaults to UTF-8;
+ * the assignment is a harmless no-op there). Guarded because the setter needs
+ * a console handle, which a windowsHide spawn does not have on some hosts.
+ */
+export function toPowershellStatelessScript(command: string): string {
+	return [
+		"try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch {}",
+		"$global:LASTEXITCODE = $null",
+		command,
+		"$__rc = if ($?) { if ($null -ne $LASTEXITCODE) { $LASTEXITCODE } else { 0 } } " +
+			"else { if ($null -ne $LASTEXITCODE) { $LASTEXITCODE } else { 1 } }",
+		"exit $__rc",
+	].join("\n");
+}
+
+export interface StatelessPlan {
+	cmd: string;
+	args: string[];
+	shell: boolean;
+}
+
+/**
+ * Build the one-shot spawn for the *pinned* shell — the whole point of issue
+ * #10: the fallback must never be a different dialect than the session.
+ *
+ *  - powershell: `-EncodedCommand` (byte-exact, exit code propagated)
+ *  - cmd: `shell: true` → %ComSpec%, i.e. cmd.exe itself — identical to the pin
+ *  - bash/zsh/fish: `-c <command>` (argv is passed straight to the shell)
+ */
+export function statelessPlan(command: string, resolved: ResolvedShell): StatelessPlan {
+	switch (resolved.shellType) {
+		case "powershell":
+			return {
+				cmd: resolved.shell,
+				args: [
+					"-NoLogo",
+					"-NoProfile",
+					"-NonInteractive",
+					"-EncodedCommand",
+					toPowershellEncodedCommand(toPowershellStatelessScript(command)),
+				],
+				shell: false,
+			};
+		case "cmd":
+			return { cmd: command, args: [], shell: true };
+		default:
+			return { cmd: resolved.shell, args: ["-c", command], shell: false };
+	}
+}
+
 export function createPtyBashOperations(config: SmartTerminalConfig): BashOperations {
 	return {
 		exec: async (command, cwd, { onData, signal, timeout }) => {
@@ -49,13 +133,26 @@ export function createPtyBashOperations(config: SmartTerminalConfig): BashOperat
 				config.bashTimeoutMs,
 			);
 
+			// Resolve the process-wide shell pin (lazy on purpose: an invalid pin
+			// becomes a tool error here, with the fix, instead of a startup crash).
+			const resolved = getResolvedShell(config.defaultShell);
+
+			// Reject payloads the pinned shell cannot carry BEFORE any spawn: fail
+			// fast and cheap (no PTY wait for a command that cannot succeed).
+			assertSupportedInShell(command, resolved.shellType);
+
 			// Fast path: the shared persistent session.
 			let session = null;
 			try {
-				session = await getOrCreateAgentSession({ cwd, shell: config.defaultShell });
+				session = await getOrCreateAgentSession({ cwd, shell: sessionShell(resolved) });
 			} catch {
 				session = null; // e.g. MAX_SESSIONS reached → stateless fallback below
 			}
+
+			// Belt and braces: the live session's shell must match the pin (memoized
+			// resolution guarantees it, but never let a divergent session run a
+			// payload the guard already rejected).
+			if (session) assertSupportedInShell(command, session.shellType);
 
 			if (session && !session.busy) {
 				const payload = needsSingleLine(command, session.shellType)
@@ -65,8 +162,10 @@ export function createPtyBashOperations(config: SmartTerminalConfig): BashOperat
 			}
 
 			// Session busy (background command / parallel bash call) or unavailable:
-			// degrade to a stateless one-shot so the call still succeeds.
-			return execStateless(command, cwd, { onData, signal, timeoutSecs, timeoutMs });
+			// degrade to a stateless one-shot so the call still succeeds — in the
+			// SAME shell, with a visible notice instead of a silent dialect switch.
+			const reason = session ? "busy" : "unavailable";
+			return execStateless(command, cwd, resolved, { onData, signal, timeoutSecs, timeoutMs }, reason);
 		},
 	};
 }
@@ -119,21 +218,33 @@ async function execInSession(
 async function execStateless(
 	command: string,
 	cwd: string,
+	resolved: ResolvedShell,
 	ctx: ExecContext,
+	reason: "busy" | "unavailable",
 ): Promise<{ exitCode: number | null }> {
+	const plan = statelessPlan(command, resolved);
 	const result = await runCommand({
-		cmd: command,
-		args: [],
+		cmd: plan.cmd,
+		args: plan.args,
 		cwd,
 		timeout: ctx.timeoutMs,
-		shell: true,
+		shell: plan.shell,
 		parse: false,
 	});
 
 	if (ctx.signal?.aborted) throw new Error("aborted");
 	if (result.timedOut) throw new Error(`timeout:${Math.max(1, Math.round(ctx.timeoutMs / 1000))}`);
 
-	const text = [result.stdout.raw, result.stderr.raw].filter((s) => s.trim()).join("\n");
+	// Make the degradation visible: same shell as the session, but a fresh
+	// process — cwd/env persistence is gone for this call. Silence here is what
+	// made agents re-diagnose a "moving target" (issue #10).
+	const notice =
+		`[smart-terminal] shared session ${reason}: ran one-shot in ${shellDialect(resolved.shellType)} ` +
+		`(${resolved.shell}). Stateless, so cd and env from the shared session do not apply here.`;
+
+	const text = [result.stdout.raw, result.stderr.raw, notice]
+		.filter((s) => s.trim())
+		.join("\n");
 	if (text.trim()) ctx.onData(Buffer.from(text + "\n"));
 
 	return { exitCode: result.exitCode };
