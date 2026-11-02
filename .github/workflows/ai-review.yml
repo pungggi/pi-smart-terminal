@@ -1,0 +1,33 @@
+name: AI PR Review
+
+# Dünner Stub — die Logik liegt zentral in pungggi/ai-review (reusable workflow).
+# Benötigt in DIESEM Repo (Reusable-Workflows erben nur Caller-Secrets):
+#   CHEAPESTINFERENCE_API_KEY  +  AI_REVIEW_TOKEN
+# (fine-grained PAT mit Contents:Read-only + Pull requests:Read/write —
+# Checkout des privaten Zentral-Repos + Kommentar-Posting.
+# Details: pungggi/ai-review → docs/setup.md)
+#
+# Hinweis Public-Repo: Fork-PRs bekommen von GitHub keine Secrets — der
+# AI-Check schlägt dort fehl bzw. wird übersprungen; das ist bekannt.
+# Sweep über alle Repos (fängt nachts gepushte PRs ab): zentral konfiguriert.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR-Nummer (optional; leer = PR des aktuellen Branches)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    uses: pungggi/ai-review/.github/workflows/review.yml@main
+    with:
+      pr_number: ${{ inputs.pr_number }}
+    secrets: inherit
