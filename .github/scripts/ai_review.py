@@ -63,7 +63,7 @@ GH = "https://api.github.com"
 # AI_REVIEW_TOKEN (PAT, Zugriff auf alle Repos) gewinnt — wichtig für Sweep-ALL.
 # Im Einzelfahr-Modus reicht der Repo-eigene GITHUB_TOKEN.
 TOKEN = os.environ.get("AI_REVIEW_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
-API_KEY = os.environ.get("CHEAPESTINFERENCE_API_KEY", "")
+API_KEY = os.environ.get("CHEAPESTINFERENCE_API_KEY", "").strip()
 LAST_HTTP_ERR = ""  # letzter HTTPError-Body (Diagnose, z. B. 422 beim Review-POST)
 
 SEV_ICON = {"high": "🔴", "medium": "🟠", "low": "🟡"}
