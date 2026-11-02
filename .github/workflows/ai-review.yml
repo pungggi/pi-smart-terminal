@@ -46,9 +46,9 @@ jobs:
           else
             H=$(date -u +%H); H=$((10#$H)); S=$((10#$START)); E=$((10#$END))
             if [ "$S" -lt "$E" ]; then
-              IN=$([ "$H" -ge "$S" ] && [ "$H" -lt "$E" ] && echo true || echo false)
+              if [ "$H" -ge "$S" ] && [ "$H" -lt "$E" ]; then IN=true; else IN=false; fi
             else
-              IN=$([ "$H" -ge "$S" ] || [ "$H" -lt "$E" ] && echo true || echo false)
+              if [ "$H" -ge "$S" ] || [ "$H" -lt "$E" ]; then IN=true; else IN=false; fi
             fi
             echo "UTC-Stunde $H, Slot $START-$END → in_slot=$IN"
             echo "in_slot=$IN" >> "$GITHUB_OUTPUT"
