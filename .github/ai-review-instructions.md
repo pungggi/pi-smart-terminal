@@ -32,4 +32,9 @@ Der Bot liest diese Datei vom PR-Head. Kurze, konkrete Regeln, eine pro Zeile.
 - `release.yml` unterstützt bewusst zwei Auth-Pfade (OIDC Trusted Publishing ohne `NPM_TOKEN` UND Classic Token); das umständliche Leer-Token-Handling ist Absicht (actions/setup-node#1551), kein toter Code.
 - `npm-support-ticket.md` und `docs/` sind Arbeits- und Doku-Dateien, kein Produktionscode.
 - `src/upstream.d.ts` enthält lokale Typ-Deklarationen für Upstream-APIs — Abweichungen von den Original-Typen sind bewusst minimal gehalten.
+- Slot-Check in beiden Workflows: numerische Validierung (`elif ! [[ =~ ^[0-9]+$ ]]`) und explizite if/then-Form sind vorhanden und getestet (leer / nicht-numerisch / Wrap / Normal). Der zitierte Legacy-Ausdruck `IN=$(... && echo true || echo false)` existiert nicht mehr; Precedence-Diskussionen dazu sind obsolet.
+- Cron `5-59/20 18-23,0-1` und das exklusive Slot-Ende (`H < E`) sind konsistent: Block = 18:00–01:59 UTC, identisch zum zentralen Sweep in `pungggi/ai-review` — keine Abdeckungslücke, Stunde 2 wäre per Slot-Check ein No-Op.
+- Die gemeinsame concurrency-Gruppe `ai-review` beider Workflows ist bewusst: genau ein Review-Run gleichzeitig (Fair Use, „1 Request gleichzeitig pro Key" — siehe Kommentar im Script).
+- Außerhalb des Slots wird der Review-Step bewusst übersprungen; das Step-Log dokumentiert `in_slot=...` — kein stiller Ausfall.
+- `.github/scripts/ai_review.py` ist eine Vollkopie aus `pungggi/ai-review`: Code-Verbesserungen daran (call_llm-Retry-Struktur — der Retry-Call liegt innerhalb des äußeren try/except und wird von den 429/5xx-Handlern abgedeckt, parse_review-Fence-Handling, Verhalten bei Inline-POST-Fehlern) gehören upstream ins Zentral-Repo, nicht in diesen PR.
 - Diese Datei selbst ist Konfiguration für den Reviewer: eine Regel pro Zeile ist Format, kein Stilfehler.
