@@ -40,6 +40,9 @@ jobs:
           if [ -z "$START" ] || [ -z "$END" ]; then
             echo "Kein Slot gesetzt — Review läuft jederzeit."
             echo "in_slot=true" >> "$GITHUB_OUTPUT"
+          elif ! [[ "$START" =~ ^[0-9]+$ && "$END" =~ ^[0-9]+$ ]]; then
+            echo "::warning::Slot-Variablen nicht numerisch (START='$START' END='$END') — Review läuft jederzeit."
+            echo "in_slot=true" >> "$GITHUB_OUTPUT"
           else
             H=$(date -u +%H); H=$((10#$H)); S=$((10#$START)); E=$((10#$END))
             if [ "$S" -lt "$E" ]; then

@@ -38,15 +38,27 @@ def env_or(name: str, default: str) -> str:
 API_BASE = env_or("AI_API_BASE", "https://api.cheapestinference.com/v1").rstrip("/")
 MODEL = env_or("AI_MODEL", "deepseek-v4.1-flash")
 LANG = env_or("AI_LANGUAGE", "de")
-MAX_DIFF = int(env_or("AI_MAX_DIFF_CHARS", "300000"))
-MAX_FILES = int(env_or("AI_MAX_FILES", "40"))
+
+
+def env_int(name: str, default: int) -> int:
+    """Ganzzahl-Env: leer → Default; ungültig → Fehlkonfiguration (Exit 1)
+    statt rohem ValueError-Traceback."""
+    v = env_or(name, str(default))
+    try:
+        return int(v)
+    except ValueError:
+        raise SystemExit(f"Fehlkonfiguration: {name}={v!r} ist keine Ganzzahl.")
+
+
+MAX_DIFF = env_int("AI_MAX_DIFF_CHARS", 300000)
+MAX_FILES = env_int("AI_MAX_FILES", 40)
 PER_FILE_CAP = 20000
 INSTRUCTIONS_CAP = 16000
-TIMEOUT = int(env_or("AI_TIMEOUT", "240"))
+TIMEOUT = env_int("AI_TIMEOUT", 240)
 INCLUDE_DRAFTS = env_or("AI_REVIEW_INCLUDE_DRAFTS", "false").lower() == "true"
 INSTRUCTIONS_PATH = env_or("AI_INSTRUCTIONS", ".github/ai-review-instructions.md")
-SWEEP_MAX_REVIEWS = int(env_or("AI_SWEEP_MAX_REVIEWS", "8"))
-SWEEP_MAX_PER_REPO = int(env_or("AI_SWEEP_MAX_PER_REPO", "3"))
+SWEEP_MAX_REVIEWS = env_int("AI_SWEEP_MAX_REVIEWS", 8)
+SWEEP_MAX_PER_REPO = env_int("AI_SWEEP_MAX_PER_REPO", 3)
 REPOS_FILTER = [p.strip() for p in env_or("AI_REPOS_FILTER", "").split(",") if p.strip()]
 REPOS_EXCLUDE = [p.strip() for p in env_or("AI_REPOS_EXCLUDE", "ai-review").split(",") if p.strip()]
 EXCLUDE = [
@@ -461,7 +473,11 @@ def review_pr(repo: str, n: int) -> str:
 
 
 def sweep_one_pr(repo: str, n: int, posted_counter: list) -> None:
-    head_sha = get_pr(repo, n)["head"]["sha"]
+    pr = get_pr(repo, n)
+    if not pr:
+        log(f"{repo}#{n}: PR nicht (mehr) verfügbar — übersprungen.")
+        return
+    head_sha = pr["head"]["sha"]
     commit = get_commit(repo, head_sha)
     head_dt = parse_dt(((commit or {}).get("commit") or {}).get("committer", {}).get("date")
                        or "1970-01-01T00:00:00Z")
