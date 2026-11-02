@@ -55,7 +55,9 @@ jobs:
           fi
 
       - name: Review ausführen
-        if: steps.slot.outputs.in_slot == 'true'
+        # workflow_dispatch umgeht den Slot bewusst: Der dokumentierte Re-Review-Weg
+        # (Actions → Run workflow) muss auch außerhalb des Zeitblocks funktionieren.
+        if: steps.slot.outputs.in_slot == 'true' || github.event_name == 'workflow_dispatch'
         env:
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}

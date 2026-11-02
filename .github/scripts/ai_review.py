@@ -110,6 +110,12 @@ def gh_request(path: str, method: str = "GET", body: dict | None = None) -> tupl
         except Exception:
             LAST_HTTP_ERR = f"(Body nicht lesbar, HTTP {e.code})"
         return e.code, None
+    except urllib.error.URLError as e:
+        # Netzwerkfehler (DNS, Connection Reset, Timeout): wie HTTP-Fehler
+        # behandeln — (0, None) statt Crash, damit ein PR den Sweep nicht reißt.
+        LAST_HTTP_ERR = f"URLError: {e.reason}"
+        log(f"⚠️ gh_request {method} {path}: Netzwerkfehler — {e.reason}")
+        return 0, None
 
 
 def gh_paginate(path: str, max_pages: int = 5) -> list:
@@ -221,6 +227,9 @@ def build_diff(files: list) -> tuple[str, dict, bool]:
         p = patch
         if len(p) > PER_FILE_CAP:
             p = p[:PER_FILE_CAP]
+            cut = p.rfind("\n")
+            if cut > 0:
+                p = p[:cut + 1]  # nie mitten in einer Zeile abschneiden
             truncated = True
         chunk = f"--- a/{path}\n+++ b/{path}\n{p}\n"
         parts.append(chunk)
@@ -279,22 +288,29 @@ def call_llm(user_prompt: str) -> str:
                 # Output-Cap erreicht → JSON wird mid-Stream abgeschnitten → Parse-Fallback
                 # liefert Roh-JSON als Body (beobachtet in Runde 3 von ztilt#24).
                 log(f"⚠️ LLM-Antwort bei max_tokens={payload['max_tokens']} abgeschnitten (finish_reason=length) — Retry mit 6000.")
-                payload["max_tokens"] = 6000
-                req = urllib.request.Request(
-                    f"{API_BASE}/chat/completions",
-                    data=json.dumps(payload).encode(),
-                    method="POST",
-                    headers={
-                        "Authorization": f"Bearer {API_KEY}",
-                        "Content-Type": "application/json",
-                        "User-Agent": "ai-review-bot",
-                    },
-                )
-                with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-                    out = json.loads(r.read())
-                choice = out["choices"][0]
-                content = choice["message"]["content"]
-                log(f"Retry finish_reason={choice.get('finish_reason')}")
+                try:
+                    payload["max_tokens"] = 6000
+                    req = urllib.request.Request(
+                        f"{API_BASE}/chat/completions",
+                        data=json.dumps(payload).encode(),
+                        method="POST",
+                        headers={
+                            "Authorization": f"Bearer {API_KEY}",
+                            "Content-Type": "application/json",
+                            "User-Agent": "ai-review-bot",
+                        },
+                    )
+                    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                        out = json.loads(r.read())
+                    choice2 = out["choices"][0]
+                    if choice2.get("finish_reason") == "length":
+                        log("⚠️ Auch der 6000er-Request ist abgeschnitten — arbeite mit der gekürzten Antwort weiter (Parse-Fallback).")
+                    content = choice2["message"]["content"]
+                    log(f"Retry finish_reason={choice2.get('finish_reason')}")
+                except (urllib.error.HTTPError, urllib.error.URLError) as e:
+                    # Der 6000er-Retry scheitert → die erste (gekürzte, aber
+                    # brauchbare) Antwort nicht wegwerfen, sondern verwenden.
+                    log(f"⚠️ 6000er-Retry fehlgeschlagen ({e}) — verwende die erste Antwort (Parse-Fallback).")
             return content
         except urllib.error.HTTPError as e:
             body = ""
@@ -326,7 +342,7 @@ def parse_review(text: str) -> tuple[str, list]:
         try:
             js = json.loads(cand)
             break
-        except Exception:
+        except json.JSONDecodeError:
             continue
     if not isinstance(js, dict):
         unbalanced = t.count("{") != t.count("}")
