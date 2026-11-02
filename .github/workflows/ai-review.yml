@@ -51,6 +51,9 @@ jobs:
               if [ "$H" -ge "$S" ] || [ "$H" -lt "$E" ]; then IN=true; else IN=false; fi
             fi
             echo "UTC-Stunde $H, Slot $START-$END → in_slot=$IN"
+            if [ "$IN" = "false" ]; then
+              echo "::notice::Außerhalb des Review-Slots ($START-$END UTC) — der Sweep holt diesen PR automatisch nach. Manuelles Re-Review: Actions → AI PR Review → Run workflow."
+            fi
             echo "in_slot=$IN" >> "$GITHUB_OUTPUT"
           fi
 
