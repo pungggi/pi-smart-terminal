@@ -27,8 +27,8 @@ Der Bot liest diese Datei vom PR-Head. Kurze, konkrete Regeln, eine pro Zeile.
 
 ## Bekannte Kontexte (nicht als Finding melden)
 
-- `.github/workflows/ai-review.yml` ist ein bewusst dünner Stub: `pr_number`-Vertrag, `permissions` und `secrets: inherit` mit dem zentralen reusable Workflow in `pungggi/ai-review` sind bekannt und verifiziert — leere Inputs bei `pull_request`-Events sind beabsichtigt.
-- Dieses Repo ist public: bei Fork-PRs liefert GitHub keine Secrets, der AI-Check schlägt dort fehl bzw. wird übersprungen — kein Finding im Stub.
+- Dieses Repo ist public und kann deshalb den privaten reusable Workflow in `pungggi/ai-review` nicht aufrufen (GitHub-Plattformbeschränkung). Die Dateien `.github/workflows/ai-review.yml`, `.github/workflows/ai-review-sweep.yml` und `.github/scripts/ai_review.py` sind deshalb eine bewusste Vollkopie (Standalone-Modus von `pungggi/ai-review`, siehe dessen `scripts/seed-repo.sh`) — Updates kommen per Übernahme aus dem Zentral-Repo, kein zu dünner Stub, kein Tippfehler.
+- Bei Fork-PRs liefert GitHub keine Secrets — der AI-Check schlägt dort fehl bzw. wird übersprungen; das ist bekannt und kein Finding in den Workflow-Dateien.
 - `release.yml` unterstützt bewusst zwei Auth-Pfade (OIDC Trusted Publishing ohne `NPM_TOKEN` UND Classic Token); das umständliche Leer-Token-Handling ist Absicht (actions/setup-node#1551), kein toter Code.
 - `npm-support-ticket.md` und `docs/` sind Arbeits- und Doku-Dateien, kein Produktionscode.
 - `src/upstream.d.ts` enthält lokale Typ-Deklarationen für Upstream-APIs — Abweichungen von den Original-Typen sind bewusst minimal gehalten.

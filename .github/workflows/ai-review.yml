@@ -1,15 +1,11 @@
 name: AI PR Review
 
-# Dünner Stub — die Logik liegt zentral in pungggi/ai-review (reusable workflow).
-# Benötigt in DIESEM Repo (Reusable-Workflows erben nur Caller-Secrets):
-#   CHEAPESTINFERENCE_API_KEY  +  AI_REVIEW_TOKEN
-# (fine-grained PAT mit Contents:Read-only + Pull requests:Read/write —
-# Checkout des privaten Zentral-Repos + Kommentar-Posting.
-# Details: pungggi/ai-review → docs/setup.md)
-#
-# Hinweis Public-Repo: Fork-PRs bekommen von GitHub keine Secrets — der
-# AI-Check schlägt dort fehl bzw. wird übersprungen; das ist bekannt.
-# Sweep über alle Repos (fängt nachts gepushte PRs ab): zentral konfiguriert.
+# Per-Repo-Variante (standalone): instant Review bei jedem Push auf einen PR.
+# Voraussetzungen in DIESEM Repo:
+#   - Secret CHEAPESTINFERENCE_API_KEY
+#   - Optional: Variablen AI_REVIEW_SLOT_START/END (UTC-Stunden), AI_API_BASE, AI_MODEL
+# Für PRs, die außerhalb des Zeitblocks gepusht werden, zusätzlich den
+# ai-review-sweep.yml installieren (oder den zentralen Sweep in pungggi/ai-review nutzen).
 
 on:
   pull_request:
@@ -25,9 +21,45 @@ permissions:
   contents: read
   pull-requests: write
 
+concurrency:
+  group: ai-review
+  cancel-in-progress: false
+
 jobs:
   review:
-    uses: pungggi/ai-review/.github/workflows/review.yml@main
-    with:
-      pr_number: ${{ inputs.pr_number }}
-    secrets: inherit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Slot-Check (CheapestInference Zeitblock)
+        id: slot
+        run: |
+          START="${{ vars.AI_REVIEW_SLOT_START }}"
+          END="${{ vars.AI_REVIEW_SLOT_END }}"
+          if [ -z "$START" ] || [ -z "$END" ]; then
+            echo "Kein Slot gesetzt — Review läuft jederzeit."
+            echo "in_slot=true" >> "$GITHUB_OUTPUT"
+          else
+            H=$(date -u +%H); H=$((10#$H)); S=$((10#$START)); E=$((10#$END))
+            if [ "$S" -lt "$E" ]; then
+              IN=$([ "$H" -ge "$S" ] && [ "$H" -lt "$E" ] && echo true || echo false)
+            else
+              IN=$([ "$H" -ge "$S" ] || [ "$H" -lt "$E" ] && echo true || echo false)
+            fi
+            echo "UTC-Stunde $H, Slot $START-$END → in_slot=$IN"
+            echo "in_slot=$IN" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Review ausführen
+        if: steps.slot.outputs.in_slot == 'true'
+        env:
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHEAPESTINFERENCE_API_KEY: ${{ secrets.CHEAPESTINFERENCE_API_KEY }}
+          AI_API_BASE: ${{ vars.AI_API_BASE }}
+          AI_MODEL: ${{ vars.AI_MODEL }}
+          AI_LANGUAGE: ${{ vars.AI_LANGUAGE }}
+          AI_REVIEW_INCLUDE_DRAFTS: ${{ vars.AI_REVIEW_INCLUDE_DRAFTS }}
+        run: python3 .github/scripts/ai_review.py
