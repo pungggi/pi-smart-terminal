@@ -7,8 +7,8 @@ name: AI PR Review Sweep
 
 on:
   schedule:
-    # Europe-Block 08:00–16:00 UTC. Anpassen bei anderem Block.
-    - cron: "*/20 8-15 * * *"
+    # Americas-Block 18–02 UTC (wie zentraler Sweep in pungggi/ai-review).
+    - cron: "5-59/20 18-23,0-1 * * *"
   workflow_dispatch: {}
 
 permissions:
