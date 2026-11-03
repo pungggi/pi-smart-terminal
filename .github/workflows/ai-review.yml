@@ -1,15 +1,23 @@
 name: AI PR Review
 
-# Per-Repo-Variante (standalone): instant Review bei jedem Push auf einen PR.
-# Voraussetzungen in DIESEM Repo:
-#   - Secret CHEAPESTINFERENCE_API_KEY
-#   - Optional: Variablen AI_REVIEW_SLOT_START/END (UTC-Stunden), AI_API_BASE, AI_MODEL
-# Für PRs, die außerhalb des Zeitblocks gepusht werden, zusätzlich den
-# ai-review-sweep.yml installieren (oder den zentralen Sweep in pungggi/ai-review nutzen).
+# Dünner Stub — die Logik liegt zentral in pungggi/ai-review (reusable workflow).
+# Vorteile: Script-Updates kommen automatisch mit, ein Secret gibt es dort.
+# Für diesen Stub braucht dieses Repo zusätzlich das Secret CHEAPESTINFERENCE_API_KEY.
+#
+# Sweep über ALLE Repos (fängt auch nachts gepushte PRs ab, die außerhalb des
+# CheapestInference-Zeitblocks liegen): läuft zentral in pungggi/ai-review,
+# Workflow "AI PR Review Sweep (alle Repos)" — hier ist nichts weiter nötig.
+
+# Trigger-Politik (2026-11-03, nach dem E8.4-Loop): KEIN synchronize —
+# jeder Fix-Push feuerte sonst automatisch das nächste Review und der
+# Loop trug sich selbst (17+ Runden, teils Runde-für-Runde-Wiederholungen).
+# Re-Review ist bewusst manuell: Actions → „AI PR Review“ → Run workflow
+# (bzw. gh workflow run ai-review.yml --ref <branch> -f pr_number=<N>).
+# Überspringen einzelner Pushes braucht dadurch KEIN [skip review] mehr.
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, reopened]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -17,54 +25,18 @@ on:
         required: false
         type: string
 
+# Manuelle Mehrfach-Auslösungen stapeln nicht: die neueste gewinnt.
+concurrency:
+  group: ai-review-${{ inputs.pr_number || github.event.pull_request.number }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pull-requests: write
 
-concurrency:
-  group: ai-review
-  cancel-in-progress: false
-
 jobs:
   review:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Slot-Check (CheapestInference Zeitblock)
-        id: slot
-        run: |
-          START="${{ vars.AI_REVIEW_SLOT_START }}"
-          END="${{ vars.AI_REVIEW_SLOT_END }}"
-          if [ -z "$START" ] || [ -z "$END" ]; then
-            echo "Kein Slot gesetzt — Review läuft jederzeit."
-            echo "in_slot=true" >> "$GITHUB_OUTPUT"
-          elif ! [[ "$START" =~ ^[0-9]+$ && "$END" =~ ^[0-9]+$ ]]; then
-            echo "::warning::Slot-Variablen nicht numerisch (START='$START' END='$END') — Review läuft jederzeit."
-            echo "in_slot=true" >> "$GITHUB_OUTPUT"
-          else
-            H=$(date -u +%H); H=$((10#$H)); S=$((10#$START)); E=$((10#$END))
-            if [ "$S" -lt "$E" ]; then
-              if [ "$H" -ge "$S" ] && [ "$H" -lt "$E" ]; then IN=true; else IN=false; fi
-            else
-              if [ "$H" -ge "$S" ] || [ "$H" -lt "$E" ]; then IN=true; else IN=false; fi
-            fi
-            echo "UTC-Stunde $H, Slot $START-$END → in_slot=$IN"
-            echo "in_slot=$IN" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Review ausführen
-        # workflow_dispatch umgeht den Slot bewusst: Der dokumentierte Re-Review-Weg
-        # (Actions → Run workflow) muss auch außerhalb des Zeitblocks funktionieren.
-        if: steps.slot.outputs.in_slot == 'true' || github.event_name == 'workflow_dispatch'
-        env:
-          REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CHEAPESTINFERENCE_API_KEY: ${{ secrets.CHEAPESTINFERENCE_API_KEY }}
-          AI_API_BASE: ${{ vars.AI_API_BASE }}
-          AI_MODEL: ${{ vars.AI_MODEL }}
-          AI_LANGUAGE: ${{ vars.AI_LANGUAGE }}
-          AI_REVIEW_INCLUDE_DRAFTS: ${{ vars.AI_REVIEW_INCLUDE_DRAFTS }}
-        run: python3 .github/scripts/ai_review.py
+    uses: pungggi/ai-review/.github/workflows/review.yml@main
+    with:
+      pr_number: ${{ inputs.pr_number }}
+    secrets: inherit
