@@ -51,7 +51,7 @@ function errorResult(message: string): AgentToolResult {
 	return { content: [{ type: "text", text: message }], details: {}, isError: true };
 }
 
-function rendered(component: { render: (width: number) => string[] }): string {
+function rendered(component: { render: (width: number) => readonly string[] }): string {
 	return component.render(300).join("\n");
 }
 

@@ -22,7 +22,26 @@
 
 import type { AgentToolResult, ExtensionAPI, ToolAnnotations, ToolNamespace } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { StringEnum } from "@earendil-works/pi-ai";
+
+/**
+ * typebox-native string-enum schema builder.
+ *
+ * pi-ai's StringEnum switched to @earendil-works/pi-schema types in 1.6.0,
+ * which breaks typebox's Static inference inside Type.Object (affected
+ * properties degrade to unknown/{}). registerTool still expects a typebox
+ * TSchema, so we keep the same { type: "string", enum: [...] } wire shape
+ * that pi-ai's version emits (provider-compatible, no anyOf/const).
+ */
+function StringEnum<T extends readonly string[]>(
+	values: T,
+	options?: { description?: string },
+) {
+	return Type.Unsafe<T[number]>({
+		type: "string",
+		enum: [...values],
+		...(options?.description !== undefined ? { description: options.description } : {}),
+	});
+}
 
 import {
 	DEFAULT_EXEC_MAX_LINES,
